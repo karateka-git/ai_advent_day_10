@@ -15,7 +15,16 @@ class ConsoleAgentLifecycleListener(
         loadingIndicator.start("Сжимаем контекст")
     }
 
-    override fun onContextCompressionFinished() {
+    override fun onContextCompressionFinished(stats: ContextCompressionStats) {
         loadingIndicator.stop()
+
+        val message =
+            if (stats.tokensBefore != null && stats.tokensAfter != null && stats.savedTokens != null) {
+                "Контекст сжат: ${stats.tokensBefore} -> ${stats.tokensAfter} токенов, экономия ${stats.savedTokens}"
+            } else {
+                "Контекст сжат."
+            }
+
+        println(message)
     }
 }

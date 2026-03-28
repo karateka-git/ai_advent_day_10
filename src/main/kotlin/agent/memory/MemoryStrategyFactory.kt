@@ -32,10 +32,7 @@ object MemoryStrategyFactory {
             "summary_compression" -> SummaryCompressionMemoryStrategy(
                 recentMessagesCount = DEFAULT_RECENT_MESSAGES_COUNT,
                 summaryBatchSize = DEFAULT_SUMMARY_BATCH_SIZE,
-                summarizer = LlmConversationSummarizer(
-                    languageModel = languageModel,
-                    lifecycleListener = lifecycleListener
-                )
+                summarizer = LlmConversationSummarizer(languageModel)
             )
 
             else -> error("Неизвестная стратегия памяти: $strategyId")

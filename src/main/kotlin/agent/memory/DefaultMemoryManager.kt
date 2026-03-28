@@ -1,6 +1,9 @@
 package agent.memory
 
 import agent.core.AgentTokenStats
+import agent.lifecycle.AgentLifecycleListener
+import agent.lifecycle.ContextCompressionStats
+import agent.lifecycle.NoOpAgentLifecycleListener
 import agent.memory.model.ConversationSummary
 import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
@@ -18,7 +21,8 @@ class DefaultMemoryManager(
     private val languageModel: LanguageModel,
     private val systemPrompt: String,
     private val conversationStore: JsonConversationStore = JsonConversationStore.forLanguageModel(languageModel),
-    private val memoryStrategy: MemoryStrategy = NoCompressionMemoryStrategy()
+    private val memoryStrategy: MemoryStrategy = NoCompressionMemoryStrategy(),
+    private val lifecycleListener: AgentLifecycleListener = NoOpAgentLifecycleListener
 ) : MemoryManager {
     private val conversationMapper = ChatMessageConversationMapper()
     private var memoryState = loadMemoryState()
@@ -41,11 +45,10 @@ class DefaultMemoryManager(
     }
 
     override fun appendUserMessage(userPrompt: String): List<ChatMessage> {
-        memoryState = memoryStrategy.refreshState(
-            memoryState.copy(
-                messages = memoryState.messages + ChatMessage(role = ChatRole.USER, content = userPrompt)
-            )
+        val stateWithUserMessage = memoryState.copy(
+            messages = memoryState.messages + ChatMessage(role = ChatRole.USER, content = userPrompt)
         )
+        memoryState = refreshState(stateWithUserMessage, notifyCompression = true)
         saveState()
         return effectiveConversation()
     }
@@ -119,12 +122,36 @@ class DefaultMemoryManager(
 
     private fun effectiveConversationWithUserPrompt(userPrompt: String): List<ChatMessage> =
         memoryStrategy.effectiveContext(
-            memoryStrategy.refreshState(
+            refreshState(
                 memoryState.copy(
                     messages = memoryState.messages + ChatMessage(role = ChatRole.USER, content = userPrompt)
-                )
+                ),
+                notifyCompression = false
             )
         )
+
+    private fun refreshState(
+        state: MemoryState,
+        notifyCompression: Boolean
+    ): MemoryState {
+        val refreshedState = memoryStrategy.refreshState(state)
+        if (!notifyCompression || !compressionApplied(state, refreshedState)) {
+            return refreshedState
+        }
+
+        lifecycleListener.onContextCompressionStarted()
+        lifecycleListener.onContextCompressionFinished(
+            ContextCompressionStats(
+                tokensBefore = languageModel.tokenCounter?.countMessages(memoryStrategy.effectiveContext(state)),
+                tokensAfter = languageModel.tokenCounter?.countMessages(memoryStrategy.effectiveContext(refreshedState))
+            )
+        )
+
+        return refreshedState
+    }
+
+    private fun compressionApplied(previousState: MemoryState, refreshedState: MemoryState): Boolean =
+        refreshedState.metadata.compressedMessagesCount > previousState.metadata.compressedMessagesCount
 
     private fun ConversationMemoryState.toMemoryState(): MemoryState =
         MemoryState(

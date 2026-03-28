@@ -7,5 +7,5 @@ object NoOpAgentLifecycleListener : AgentLifecycleListener {
 
     override fun onContextCompressionStarted() = Unit
 
-    override fun onContextCompressionFinished() = Unit
+    override fun onContextCompressionFinished(stats: ContextCompressionStats) = Unit
 }

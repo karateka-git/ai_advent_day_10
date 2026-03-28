@@ -12,12 +12,14 @@ interface AgentLifecycleListener {
     fun onModelWarmupFinished()
 
     /**
-     * Вызывается перед запуском LLM-сжатия истории диалога.
+     * Вызывается перед запуском сжатия истории диалога.
      */
     fun onContextCompressionStarted()
 
     /**
-     * Вызывается после завершения LLM-сжатия истории диалога.
+     * Вызывается после завершения сжатия истории диалога.
+     *
+     * @param stats статистика токенов до и после сжатия
      */
-    fun onContextCompressionFinished()
+    fun onContextCompressionFinished(stats: ContextCompressionStats)
 }

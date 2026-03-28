@@ -23,10 +23,7 @@ class MrAgent(
     memoryStrategy: MemoryStrategy = SummaryCompressionMemoryStrategy(
         recentMessagesCount = 2,
         summaryBatchSize = 3,
-        summarizer = LlmConversationSummarizer(
-            languageModel = languageModel,
-            lifecycleListener = lifecycleListener
-        )
+        summarizer = LlmConversationSummarizer(languageModel)
     ),
     private val memoryManager: MemoryManager = DefaultMemoryManager(
         languageModel = languageModel,
@@ -34,7 +31,8 @@ class MrAgent(
             systemPrompt = systemPrompt,
             responseFormatInstruction = TextResponseFormat.formatInstruction
         ),
-        memoryStrategy = memoryStrategy
+        memoryStrategy = memoryStrategy,
+        lifecycleListener = lifecycleListener
     )
 ) : Agent<String> {
     override val responseFormat: ResponseFormat<String> = TextResponseFormat

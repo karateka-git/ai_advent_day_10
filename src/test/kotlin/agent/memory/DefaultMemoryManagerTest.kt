@@ -1,16 +1,20 @@
 package agent.memory
 
+import agent.lifecycle.AgentLifecycleListener
+import agent.lifecycle.ContextCompressionStats
 import agent.memory.model.MemoryState
 import agent.memory.summarizer.ConversationSummarizer
 import agent.storage.JsonConversationStore
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import llm.core.LanguageModel
 import llm.core.model.ChatMessage
 import llm.core.model.ChatRole
 import llm.core.model.LanguageModelInfo
 import llm.core.model.LanguageModelResponse
+import llm.core.tokenizer.TokenCounter
 
 class DefaultMemoryManagerTest {
     @Test
@@ -106,18 +110,20 @@ class DefaultMemoryManagerTest {
     }
 
     @Test
-    fun `summary strategy compresses history before model request`() {
+    fun `summary strategy compresses history before model request and reports token stats`() {
         val tempDir = Files.createTempDirectory("memory-manager-test")
         val store = JsonConversationStore(tempDir.resolve("conversation.json"))
+        val lifecycleListener = RecordingAgentLifecycleListener()
         val manager = DefaultMemoryManager(
-            languageModel = FakeLanguageModel(),
+            languageModel = FakeLanguageModel(tokenCounter = CharacterTokenCounter()),
             systemPrompt = "Системное сообщение",
             conversationStore = store,
             memoryStrategy = SummaryCompressionMemoryStrategy(
                 recentMessagesCount = 2,
                 summaryBatchSize = 2,
                 summarizer = FixedConversationSummarizer("Сжатый фрагмент")
-            )
+            ),
+            lifecycleListener = lifecycleListener
         )
 
         manager.appendUserMessage("u1")
@@ -160,19 +166,48 @@ class DefaultMemoryManagerTest {
             ),
             manager.currentConversation()
         )
+        assertEquals(1, lifecycleListener.contextCompressionStartedCount)
+        val stats = assertNotNull(lifecycleListener.lastContextCompressionStats)
+        assertNotNull(stats.tokensBefore)
+        assertNotNull(stats.tokensAfter)
+        assertNotNull(stats.savedTokens)
+        assertEquals(stats.tokensBefore - stats.tokensAfter, stats.savedTokens)
     }
 }
 
-private class FakeLanguageModel : LanguageModel {
+private class RecordingAgentLifecycleListener : AgentLifecycleListener {
+    var contextCompressionStartedCount: Int = 0
+        private set
+    var lastContextCompressionStats: ContextCompressionStats? = null
+        private set
+
+    override fun onModelWarmupStarted() = Unit
+
+    override fun onModelWarmupFinished() = Unit
+
+    override fun onContextCompressionStarted() {
+        contextCompressionStartedCount++
+    }
+
+    override fun onContextCompressionFinished(stats: ContextCompressionStats) {
+        lastContextCompressionStats = stats
+    }
+}
+
+private class FakeLanguageModel(
+    override val tokenCounter: TokenCounter? = null
+) : LanguageModel {
     override val info = LanguageModelInfo(
         name = "FakeLanguageModel",
         model = "fake-model"
     )
 
-    override val tokenCounter = null
-
     override fun complete(messages: List<ChatMessage>): LanguageModelResponse =
         error("Не должен вызываться в этом тесте.")
+}
+
+private class CharacterTokenCounter : TokenCounter {
+    override fun countText(text: String): Int = text.length
 }
 
 private class LastMessageOnlyStrategy : MemoryStrategy {
