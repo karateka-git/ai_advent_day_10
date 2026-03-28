@@ -4,8 +4,6 @@ import agent.core.AgentTokenStats
 import agent.memory.model.ConversationSummary
 import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
-import agent.memory.summarizer.ConversationSummarizer
-import agent.memory.summarizer.SimpleConversationSummarizer
 import agent.storage.JsonConversationStore
 import agent.storage.mapper.ChatMessageConversationMapper
 import agent.storage.model.ConversationMemoryState
@@ -20,8 +18,7 @@ class DefaultMemoryManager(
     private val languageModel: LanguageModel,
     private val systemPrompt: String,
     private val conversationStore: JsonConversationStore = JsonConversationStore.forLanguageModel(languageModel),
-    private val memoryStrategy: MemoryStrategy = NoCompressionMemoryStrategy(),
-    private val summarizer: ConversationSummarizer = SimpleConversationSummarizer()
+    private val memoryStrategy: MemoryStrategy = NoCompressionMemoryStrategy()
 ) : MemoryManager {
     private val conversationMapper = ChatMessageConversationMapper()
     private var memoryState = loadMemoryState()
@@ -47,8 +44,7 @@ class DefaultMemoryManager(
         memoryState = memoryStrategy.refreshState(
             memoryState.copy(
                 messages = memoryState.messages + ChatMessage(role = ChatRole.USER, content = userPrompt)
-            ),
-            summarizer
+            )
         )
         saveState()
         return effectiveConversation()
@@ -58,8 +54,7 @@ class DefaultMemoryManager(
         memoryState = memoryStrategy.refreshState(
             memoryState.copy(
                 messages = memoryState.messages + ChatMessage(role = ChatRole.ASSISTANT, content = content)
-            ),
-            summarizer
+            )
         )
         saveState()
     }
@@ -81,8 +76,7 @@ class DefaultMemoryManager(
         memoryState = memoryStrategy.refreshState(
             importedState.copy(
                 metadata = importedState.metadata.copy(strategyId = memoryStrategy.id)
-            ),
-            summarizer
+            )
         )
         saveState()
     }
@@ -93,8 +87,7 @@ class DefaultMemoryManager(
             return memoryStrategy.refreshState(
                 savedState.copy(
                     metadata = savedState.metadata.copy(strategyId = memoryStrategy.id)
-                ),
-                summarizer
+                )
             )
         }
 
@@ -131,18 +124,17 @@ class DefaultMemoryManager(
             memoryStrategy.refreshState(
                 memoryState.copy(
                     messages = memoryState.messages + ChatMessage(role = ChatRole.USER, content = userPrompt)
-                ),
-                summarizer
+                )
             )
         )
 
     private fun ConversationMemoryState.toMemoryState(): MemoryState =
         MemoryState(
             messages = messages.map(conversationMapper::fromStoredMessage),
-            summaries = summaries.map { summary ->
+            summary = summary?.let {
                 ConversationSummary(
-                    content = summary.content,
-                    coveredMessagesCount = summary.coveredMessagesCount
+                    content = it.content,
+                    coveredMessagesCount = it.coveredMessagesCount
                 )
             },
             metadata = MemoryMetadata(
@@ -154,10 +146,10 @@ class DefaultMemoryManager(
     private fun MemoryState.toStoredState(): ConversationMemoryState =
         ConversationMemoryState(
             messages = messages.map(conversationMapper::toStoredMessage),
-            summaries = summaries.map { summary ->
+            summary = summary?.let {
                 StoredSummary(
-                    content = summary.content,
-                    coveredMessagesCount = summary.coveredMessagesCount
+                    content = it.content,
+                    coveredMessagesCount = it.coveredMessagesCount
                 )
             },
             metadata = StoredMemoryMetadata(

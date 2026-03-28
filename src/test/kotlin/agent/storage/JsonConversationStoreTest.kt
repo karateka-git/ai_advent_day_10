@@ -62,7 +62,7 @@ class JsonConversationStoreTest {
     }
 
     @Test
-    fun `saveState and loadState preserve summaries and metadata`() {
+    fun `saveState and loadState preserve summary and metadata`() {
         val tempDir = Files.createTempDirectory("conversation-store-test")
         val store = JsonConversationStore(tempDir.resolve("conversation.json"))
         val state = ConversationMemoryState(
@@ -70,11 +70,9 @@ class JsonConversationStoreTest {
                 StoredMessage(role = "system", content = "Ты помощник."),
                 StoredMessage(role = "user", content = "Привет")
             ),
-            summaries = listOf(
-                StoredSummary(
-                    content = "Пользователь поздоровался.",
-                    coveredMessagesCount = 2
-                )
+            summary = StoredSummary(
+                content = "Пользователь поздоровался.",
+                coveredMessagesCount = 2
             ),
             metadata = StoredMemoryMetadata(strategyId = "no_compression")
         )

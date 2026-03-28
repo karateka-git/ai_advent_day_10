@@ -1,7 +1,6 @@
 package agent.memory
 
 import agent.memory.model.MemoryState
-import agent.memory.summarizer.ConversationSummarizer
 import llm.core.model.ChatMessage
 
 interface MemoryStrategy {
@@ -22,8 +21,7 @@ interface MemoryStrategy {
      * Обновляет состояние памяти после изменения диалога.
      *
      * @param state текущее состояние памяти
-     * @param summarizer компонент, который умеет сжимать сообщения в summary
      * @return обновлённое состояние памяти
      */
-    fun refreshState(state: MemoryState, summarizer: ConversationSummarizer): MemoryState = state
+    fun refreshState(state: MemoryState): MemoryState = state
 }

@@ -5,6 +5,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ConversationMemoryState(
     val messages: List<StoredMessage> = emptyList(),
-    val summaries: List<StoredSummary> = emptyList(),
+    val summary: StoredSummary? = null,
     val metadata: StoredMemoryMetadata = StoredMemoryMetadata()
 )

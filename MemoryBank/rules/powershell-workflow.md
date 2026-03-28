@@ -27,23 +27,40 @@ Start-Process powershell -ArgumentList '-NoExit','-Command','Set-Location ''C:\U
 
 ### Команда: `собери проект`
 
-Если пользователь пишет `собери проект`, по умолчанию это означает:
+Если пользователь пишет `собери проект`, по умолчанию это означает один обязательный атомарный workflow:
 
-1. выполнить сборку:
+1. очистить runtime-файлы истории в `config/conversations/`, но не удалять пресеты;
+2. выполнить сборку:
 
 ```powershell
 .\gradlew.bat build
 .\gradlew.bat installDist
 ```
 
-2. после этого открыть новое окно PowerShell и запустить проект командой:
+3. после этого открыть новое окно PowerShell и запустить проект командой:
 
 ```powershell
 Start-Process powershell -ArgumentList '-NoExit','-Command','Set-Location ''C:\Users\compadre\Downloads\Projects\AiAdvent\day_9''; .\build\install\ai_advent_day_9\bin\ai_advent_day_9.bat'
 ```
 
 То есть `собери проект` в этом репозитории означает:
-`build -> installDist -> запуск проекта в новом окне PowerShell`.
+`очистка runtime-истории -> build -> installDist -> запуск проекта в новом окне PowerShell`.
+
+Правило очистки истории:
+- нужно удалять только runtime-файлы истории моделей в `config/conversations/`;
+- нельзя удалять `context_overflow_preset.json`;
+- нельзя удалять всю папку `config/conversations/` целиком.
+
+Дополнительное обязательное правило:
+- команда `собери проект` не считается выполненной, если был сделан только `build` или только `installDist`, но не был выполнен запуск;
+- после очистки истории, `build` и `installDist` нужно автоматически доводить задачу до запуска, а не останавливаться и не спрашивать отдельно, если пользователь явно не просил только сборку без запуска;
+- если один из промежуточных шагов завершился неуспешно, нужно сообщить, что workflow прерван на этом шаге и запуск не был выполнен.
+
+Короткий чеклист для `собери проект`:
+1. удалить runtime-файлы истории в `config/conversations/`, кроме `context_overflow_preset.json`
+2. `.\gradlew.bat build`
+3. `.\gradlew.bat installDist`
+4. `Start-Process ... ai_advent_day_9.bat`
 
 ### Команда: `запусти проект`
 

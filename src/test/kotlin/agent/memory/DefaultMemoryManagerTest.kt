@@ -115,9 +115,9 @@ class DefaultMemoryManagerTest {
             conversationStore = store,
             memoryStrategy = SummaryCompressionMemoryStrategy(
                 recentMessagesCount = 2,
-                summaryBatchSize = 2
-            ),
-            summarizer = FixedConversationSummarizer("Сжатый фрагмент")
+                summaryBatchSize = 2,
+                summarizer = FixedConversationSummarizer("Сжатый фрагмент")
+            )
         )
 
         manager.appendUserMessage("u1")

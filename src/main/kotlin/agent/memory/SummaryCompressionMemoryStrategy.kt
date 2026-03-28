@@ -8,7 +8,8 @@ import llm.core.model.ChatRole
 
 class SummaryCompressionMemoryStrategy(
     private val recentMessagesCount: Int,
-    private val summaryBatchSize: Int
+    private val summaryBatchSize: Int,
+    private val summarizer: ConversationSummarizer
 ) : MemoryStrategy {
     init {
         require(recentMessagesCount > 0) {
@@ -22,18 +23,17 @@ class SummaryCompressionMemoryStrategy(
     override val id: String = "summary_compression"
 
     override fun effectiveContext(state: MemoryState): List<ChatMessage> {
-        if (state.summaries.isEmpty()) {
+        if (state.summary == null) {
             return state.messages.toList()
         }
 
         val systemMessages = state.messages.filter { it.role == ChatRole.SYSTEM }
         val dialogMessages = state.messages.filter { it.role != ChatRole.SYSTEM }
-        val summaryMessages = state.summaries.map(::toSummaryMessage)
 
-        return systemMessages + summaryMessages + dialogMessages
+        return systemMessages + toSummaryMessage(state.summary) + dialogMessages
     }
 
-    override fun refreshState(state: MemoryState, summarizer: ConversationSummarizer): MemoryState {
+    override fun refreshState(state: MemoryState): MemoryState {
         var currentState = state
 
         while (true) {
@@ -47,13 +47,13 @@ class SummaryCompressionMemoryStrategy(
 
             val nextBatch = messagesEligibleForCompression.take(summaryBatchSize)
             val remainingDialogMessages = dialogMessages.drop(summaryBatchSize)
-            val summaryContent = summarizer.summarize(nextBatch)
+            val summaryContent = buildUpdatedSummary(currentState.summary, nextBatch)
 
             currentState = currentState.copy(
                 messages = systemMessages + remainingDialogMessages,
-                summaries = currentState.summaries + ConversationSummary(
+                summary = ConversationSummary(
                     content = summaryContent,
-                    coveredMessagesCount = nextBatch.size
+                    coveredMessagesCount = (currentState.summary?.coveredMessagesCount ?: 0) + nextBatch.size
                 ),
                 metadata = currentState.metadata.copy(
                     compressedMessagesCount = currentState.metadata.compressedMessagesCount + nextBatch.size
@@ -62,10 +62,31 @@ class SummaryCompressionMemoryStrategy(
         }
     }
 
-    private fun toSummaryMessage(summary: ConversationSummary): ChatMessage =
-        ChatMessage(
-            role = ChatRole.SYSTEM,
-            content = "Краткое резюме предыдущего диалога:\n${summary.content}"
+    private fun buildUpdatedSummary(
+        existingSummary: ConversationSummary?,
+        nextBatch: List<ChatMessage>
+    ): String {
+        val messagesForSummary = buildList {
+            existingSummary?.let { summary ->
+                add(
+                    ChatMessage(
+                        role = ChatRole.SYSTEM,
+                        content = "Предыдущее резюме: ${summary.content}"
+                    )
+                )
+            }
+            addAll(nextBatch)
+        }
+
+        return summarizer.summarize(messagesForSummary)
+    }
+
+    private fun toSummaryMessage(summary: ConversationSummary): List<ChatMessage> =
+        listOf(
+            ChatMessage(
+                role = ChatRole.SYSTEM,
+                content = "Краткое резюме предыдущего диалога:\n${summary.content}"
+            )
         )
 
     private fun <T> List<T>.dropLastSafe(count: Int): List<T> =

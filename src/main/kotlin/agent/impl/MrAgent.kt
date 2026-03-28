@@ -9,6 +9,7 @@ import agent.format.TextResponseFormat
 import agent.memory.DefaultMemoryManager
 import agent.memory.MemoryManager
 import agent.memory.SummaryCompressionMemoryStrategy
+import agent.memory.summarizer.LlmConversationSummarizer
 import java.nio.file.Path
 import llm.core.LanguageModel
 
@@ -22,8 +23,9 @@ class MrAgent(
             responseFormatInstruction = TextResponseFormat.formatInstruction
         ),
         memoryStrategy = SummaryCompressionMemoryStrategy(
-            recentMessagesCount = 6,
-            summaryBatchSize = 10
+            recentMessagesCount = 2,
+            summaryBatchSize = 3,
+            summarizer = LlmConversationSummarizer(languageModel)
         )
     )
 ) : Agent<String> {

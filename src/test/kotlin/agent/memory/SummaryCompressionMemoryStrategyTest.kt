@@ -11,10 +11,11 @@ import llm.core.model.ChatRole
 
 class SummaryCompressionMemoryStrategyTest {
     @Test
-    fun `returns original messages when summaries are absent`() {
+    fun `returns original messages when summary is absent`() {
         val strategy = SummaryCompressionMemoryStrategy(
             recentMessagesCount = 2,
-            summaryBatchSize = 2
+            summaryBatchSize = 2,
+            summarizer = RecordingConversationSummarizer()
         )
         val messages = listOf(
             ChatMessage(role = ChatRole.SYSTEM, content = "system"),
@@ -32,7 +33,8 @@ class SummaryCompressionMemoryStrategyTest {
     fun `builds system summary and remaining dialog context`() {
         val strategy = SummaryCompressionMemoryStrategy(
             recentMessagesCount = 2,
-            summaryBatchSize = 2
+            summaryBatchSize = 2,
+            summarizer = RecordingConversationSummarizer()
         )
         val state = MemoryState(
             messages = listOf(
@@ -41,11 +43,9 @@ class SummaryCompressionMemoryStrategyTest {
                 ChatMessage(role = ChatRole.ASSISTANT, content = "a2"),
                 ChatMessage(role = ChatRole.USER, content = "u3")
             ),
-            summaries = listOf(
-                ConversationSummary(
-                    content = "Пользователь уже рассказал о прошлой задаче.",
-                    coveredMessagesCount = 2
-                )
+            summary = ConversationSummary(
+                content = "Пользователь уже рассказал о прошлой задаче.",
+                coveredMessagesCount = 2
             ),
             metadata = MemoryMetadata(compressedMessagesCount = 2)
         )
@@ -69,7 +69,8 @@ class SummaryCompressionMemoryStrategyTest {
     fun `refreshState compresses eligible batch removes source messages and tracks compressed count`() {
         val strategy = SummaryCompressionMemoryStrategy(
             recentMessagesCount = 2,
-            summaryBatchSize = 2
+            summaryBatchSize = 2,
+            summarizer = RecordingConversationSummarizer()
         )
         val messages = listOf(
             ChatMessage(role = ChatRole.SYSTEM, content = "system"),
@@ -80,13 +81,10 @@ class SummaryCompressionMemoryStrategyTest {
             ChatMessage(role = ChatRole.USER, content = "u3")
         )
 
-        val refreshedState = strategy.refreshState(
-            state = MemoryState(messages = messages),
-            summarizer = RecordingConversationSummarizer()
-        )
+        val refreshedState = strategy.refreshState(MemoryState(messages = messages))
 
-        assertEquals(1, refreshedState.summaries.size)
-        assertEquals("Пользователь: u1\nАссистент: a1", refreshedState.summaries.single().content)
+        assertEquals("Пользователь: u1\nАссистент: a1", refreshedState.summary?.content)
+        assertEquals(2, refreshedState.summary?.coveredMessagesCount)
         assertEquals(2, refreshedState.metadata.compressedMessagesCount)
         assertEquals(
             listOf(
@@ -100,10 +98,53 @@ class SummaryCompressionMemoryStrategyTest {
     }
 
     @Test
+    fun `refreshState rewrites existing summary instead of appending another one`() {
+        val strategy = SummaryCompressionMemoryStrategy(
+            recentMessagesCount = 2,
+            summaryBatchSize = 2,
+            summarizer = RecordingConversationSummarizer()
+        )
+        val state = MemoryState(
+            messages = listOf(
+                ChatMessage(role = ChatRole.SYSTEM, content = "system"),
+                ChatMessage(role = ChatRole.USER, content = "u2"),
+                ChatMessage(role = ChatRole.ASSISTANT, content = "a2"),
+                ChatMessage(role = ChatRole.USER, content = "u3"),
+                ChatMessage(role = ChatRole.ASSISTANT, content = "a3"),
+                ChatMessage(role = ChatRole.USER, content = "u4")
+            ),
+            summary = ConversationSummary(
+                content = "Пользователь: u1\nАссистент: a1",
+                coveredMessagesCount = 2
+            ),
+            metadata = MemoryMetadata(compressedMessagesCount = 2)
+        )
+
+        val refreshedState = strategy.refreshState(state)
+
+        assertEquals(
+            "Система: Предыдущее резюме: Пользователь: u1\nАссистент: a1\nПользователь: u2\nАссистент: a2",
+            refreshedState.summary?.content
+        )
+        assertEquals(4, refreshedState.summary?.coveredMessagesCount)
+        assertEquals(4, refreshedState.metadata.compressedMessagesCount)
+        assertEquals(
+            listOf(
+                ChatMessage(role = ChatRole.SYSTEM, content = "system"),
+                ChatMessage(role = ChatRole.USER, content = "u3"),
+                ChatMessage(role = ChatRole.ASSISTANT, content = "a3"),
+                ChatMessage(role = ChatRole.USER, content = "u4")
+            ),
+            refreshedState.messages
+        )
+    }
+
+    @Test
     fun `refreshState does not compress when there are not enough old messages outside recent tail`() {
         val strategy = SummaryCompressionMemoryStrategy(
             recentMessagesCount = 2,
-            summaryBatchSize = 2
+            summaryBatchSize = 2,
+            summarizer = FixedSummaryConversationSummarizer("Не должен использоваться")
         )
         val state = MemoryState(
             messages = listOf(
@@ -112,19 +153,14 @@ class SummaryCompressionMemoryStrategyTest {
                 ChatMessage(role = ChatRole.ASSISTANT, content = "a2"),
                 ChatMessage(role = ChatRole.USER, content = "u3")
             ),
-            summaries = listOf(
-                ConversationSummary(
-                    content = "Пользователь: u1\nАссистент: a1",
-                    coveredMessagesCount = 2
-                )
+            summary = ConversationSummary(
+                content = "Пользователь: u1\nАссистент: a1",
+                coveredMessagesCount = 2
             ),
             metadata = MemoryMetadata(compressedMessagesCount = 2)
         )
 
-        val refreshedState = strategy.refreshState(
-            state = state,
-            summarizer = FixedSummaryConversationSummarizer("Не должен использоваться")
-        )
+        val refreshedState = strategy.refreshState(state)
 
         assertEquals(state, refreshedState)
     }
@@ -133,12 +169,7 @@ class SummaryCompressionMemoryStrategyTest {
 private class RecordingConversationSummarizer : ConversationSummarizer {
     override fun summarize(messages: List<ChatMessage>): String =
         messages.joinToString(separator = "\n") { message ->
-            val role = when (message.role) {
-                ChatRole.SYSTEM -> "Система"
-                ChatRole.USER -> "Пользователь"
-                ChatRole.ASSISTANT -> "Ассистент"
-            }
-            "$role: ${message.content}"
+            "${message.role.displayName}: ${message.content}"
         }
 }
 
