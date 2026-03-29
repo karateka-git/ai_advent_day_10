@@ -2,6 +2,7 @@ import agent.core.AgentTokenStats
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import llm.core.model.TokenUsage
+import ui.cli.ConsoleTokenStatsFormatter
 
 class ConsoleTokenStatsFormatterTest {
     private val formatter = ConsoleTokenStatsFormatter()

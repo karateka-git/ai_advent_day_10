@@ -1,6 +1,5 @@
 package agent.memory
 
-import agent.lifecycle.AgentLifecycleListener
 import agent.memory.summarizer.LlmConversationSummarizer
 import llm.core.LanguageModel
 
@@ -33,8 +32,7 @@ object MemoryStrategyFactory {
      */
     fun create(
         strategyId: String,
-        languageModel: LanguageModel,
-        lifecycleListener: AgentLifecycleListener
+        languageModel: LanguageModel
     ): MemoryStrategy =
         when (strategyId) {
             "no_compression" -> NoCompressionMemoryStrategy()

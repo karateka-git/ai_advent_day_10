@@ -1,3 +1,5 @@
+package ui.cli
+
 import agent.core.AgentTokenStats
 
 /**

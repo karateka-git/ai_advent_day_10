@@ -1,8 +1,7 @@
 import agent.core.Agent
 import agent.impl.MrAgent
 import agent.lifecycle.AgentLifecycleListener
-import agent.lifecycle.ConsoleAgentLifecycleListener
-import agent.lifecycle.LoadingIndicator
+import agent.lifecycle.UiEventLifecycleListener
 import agent.memory.MemoryStrategyFactory
 import agent.memory.MemoryStrategyOption
 import java.io.BufferedReader
@@ -15,17 +14,16 @@ import java.util.Properties
 import llm.core.LanguageModel
 import llm.core.LanguageModelFactory
 import llm.core.model.ChatRole
+import ui.UiEvent
+import ui.UiEventSink
+import ui.cli.CliRenderer
 
 private const val CONFIG_FILE = "config/app.properties"
-private const val MODELS_COMMAND = "models"
-private const val USE_COMMAND = "use"
 
 private val consoleReader = BufferedReader(
     InputStreamReader(System.`in`, detectConsoleCharset())
 )
 private val systemConsole = System.console()
-private val tokenStatsFormatter = ConsoleTokenStatsFormatter()
-private val loadingIndicator = LoadingIndicator()
 
 /**
  * Точка входа CLI-приложения.
@@ -36,94 +34,69 @@ private val loadingIndicator = LoadingIndicator()
 fun main() {
     val config = loadConfig()
     val httpClient = HttpClient.newHttpClient()
-    val lifecycleListener: AgentLifecycleListener = ConsoleAgentLifecycleListener(loadingIndicator)
-    var languageModel: LanguageModel = LanguageModelFactory.createDefault(
+    val uiEventSink: UiEventSink = CliRenderer()
+    val lifecycleListener: AgentLifecycleListener = UiEventLifecycleListener(uiEventSink)
+
+    val languageModel: LanguageModel = LanguageModelFactory.createDefault(
         config = config,
         httpClient = httpClient
     )
     warmUpTokenCounter(languageModel, lifecycleListener)
 
-    val selectedMemoryStrategyOption = selectMemoryStrategyOption()
-    var agent: Agent<String> = createAgent(
+    val selectedMemoryStrategyOption = selectMemoryStrategyOption(uiEventSink)
+    val agent: Agent<String> = createAgent(
         languageModel = languageModel,
         lifecycleListener = lifecycleListener,
         strategyId = selectedMemoryStrategyOption.id
     )
-
-    println("Чат готов. Введите 'exit' или 'quit', чтобы завершить работу.")
-    println(
-        "Для просмотра моделей введите '$MODELS_COMMAND'. " +
-            "Для переключения модели введите '$USE_COMMAND <id>'."
+    val sessionController = CliSessionController(
+        initialState = CliSessionState(
+            modelId = defaultModelId(config),
+            languageModel = languageModel,
+            agent = agent,
+            memoryStrategyOption = selectedMemoryStrategyOption
+        ),
+        config = config,
+        httpClient = httpClient,
+        lifecycleListener = lifecycleListener,
+        uiEventSink = uiEventSink,
+        createLanguageModel = LanguageModelFactory::create,
+        createAgent = ::createAgent,
+        warmUpLanguageModel = ::warmUpTokenCounter
     )
-    printCurrentAgentInfo(agent, selectedMemoryStrategyOption)
+
+    uiEventSink.emit(
+        UiEvent.SessionStarted(
+            modelsCommand = CliCommands.MODELS,
+            useCommand = CliCommands.USE
+        )
+    )
+    uiEventSink.emit(
+        UiEvent.AgentInfoAvailable(
+            info = sessionController.state.agent.info,
+            strategy = selectedMemoryStrategyOption
+        )
+    )
 
     while (true) {
-        print("${ChatRole.USER.displayName}: ")
+        uiEventSink.emit(UiEvent.UserInputPrompt(ChatRole.USER))
         val prompt = readConsoleLine()?.trim() ?: break
 
-        if (prompt.isEmpty()) {
-            continue
-        }
-
-        if (prompt.equals("exit", ignoreCase = true) || prompt.equals("quit", ignoreCase = true)) {
-            println("Чат завершён.")
-            break
-        }
-
-        if (prompt.equals("clear", ignoreCase = true)) {
-            agent.clearContext()
-            println("Контекст очищен. Системное сообщение сохранено.")
-            continue
-        }
-
-        if (prompt.equals(MODELS_COMMAND, ignoreCase = true)) {
-            println(formatModels(config, languageModel))
-            continue
-        }
-
-        if (prompt.startsWith("$USE_COMMAND ", ignoreCase = true)) {
-            val requestedModelId = prompt.substringAfter(' ').trim()
-            try {
-                languageModel = LanguageModelFactory.create(
-                    modelId = requestedModelId,
-                    config = config,
-                    httpClient = httpClient
-                )
-                warmUpTokenCounter(languageModel, lifecycleListener)
-                agent = createAgent(
-                    languageModel = languageModel,
-                    lifecycleListener = lifecycleListener,
-                    strategyId = selectedMemoryStrategyOption.id
-                )
-                println("Текущая модель изменена.")
-                printCurrentAgentInfo(agent, selectedMemoryStrategyOption)
-            } catch (error: Exception) {
-                println("Не удалось переключить модель: ${error.message}")
-            }
-            continue
-        }
-
-        try {
-            tokenStatsFormatter.formatPreview(agent.previewTokenStats(prompt))?.let { preview ->
-                println()
-                println(preview)
-                println()
-            }
-
-            val response = agent.ask(prompt)
-
-            println()
-            println("${ChatRole.ASSISTANT.displayName}: ${response.content}")
-            tokenStatsFormatter.formatResponse(response.tokenStats)?.let {
-                println()
-                println(it)
-            }
-            println()
-        } catch (error: Exception) {
-            println("Не удалось выполнить запрос: ${error.message}")
+        when (sessionController.handle(prompt)) {
+            CliSessionControllerResult.Continue -> continue
+            CliSessionControllerResult.ExitRequested -> break
         }
     }
 }
+
+/**
+ * Возвращает идентификатор модели, которая будет выбрана по умолчанию при старте приложения.
+ */
+private fun defaultModelId(config: Properties): String =
+    LanguageModelFactory.availableModels(config)
+        .firstOrNull { it.isConfigured }
+        ?.id
+        ?: error("Не найдена ни одна доступная модель. Проверьте токены в config/app.properties.")
 
 /**
  * Создаёт новый экземпляр агента для выбранной модели и стратегии памяти.
@@ -138,76 +111,31 @@ private fun createAgent(
         lifecycleListener = lifecycleListener,
         memoryStrategy = MemoryStrategyFactory.create(
             strategyId = strategyId,
-            languageModel = languageModel,
-            lifecycleListener = lifecycleListener
+            languageModel = languageModel
         )
     )
 
 /**
  * Предлагает пользователю выбрать одну из доступных стратегий памяти перед стартом чата.
  */
-private fun selectMemoryStrategyOption(): MemoryStrategyOption {
+private fun selectMemoryStrategyOption(uiEventSink: UiEventSink): MemoryStrategyOption {
     val options = MemoryStrategyFactory.availableOptions()
-
-    println("Выберите стратегию памяти перед стартом агента:")
-    options.forEachIndexed { index, option ->
-        println("${index + 1}. ${option.displayName} - ${option.description}")
-    }
+    uiEventSink.emit(UiEvent.MemoryStrategySelectionRequested(options))
 
     while (true) {
-        print("Введите номер стратегии [1-${options.size}]: ")
+        uiEventSink.emit(UiEvent.MemoryStrategySelectionPromptRequested(options.size))
         val selection = readConsoleLine()?.trim().orEmpty()
         val index = selection.toIntOrNull()
 
         if (index != null && index in 1..options.size) {
             val option = options[index - 1]
-            println("Выбрана стратегия: ${option.displayName}")
+            uiEventSink.emit(UiEvent.MemoryStrategySelected(option))
             return option
         }
 
-        println("Некорректный выбор. Попробуйте ещё раз.")
+        uiEventSink.emit(UiEvent.MemoryStrategySelectionRejected)
     }
 }
-
-/**
- * Выводит текущую конфигурацию модели и памяти для активной сессии.
- */
-private fun printCurrentAgentInfo(agent: Agent<String>, strategy: MemoryStrategyOption) {
-    println("Агент: ${agent.info.name}")
-    println("Описание: ${agent.info.description}")
-    println("Модель: ${agent.info.model}")
-    println("Стратегия памяти: ${strategy.displayName}")
-}
-
-/**
- * Форматирует список доступных языковых моделей и помечает активную.
- */
-private fun formatModels(config: Properties, currentModel: LanguageModel): String =
-    buildString {
-        appendLine("Доступные модели:")
-        LanguageModelFactory.availableModels(config).forEach { option ->
-            val marker = if (option.id == currentModelId(currentModel)) "*" else " "
-            append(marker)
-            append(" ")
-            append(option.id)
-            append(" - ")
-            append(option.displayName)
-            if (!option.isConfigured) {
-                append(" (недоступна: ${option.unavailableReason})")
-            }
-            appendLine()
-        }
-    }.trimEnd()
-
-/**
- * Преобразует экземпляр модели времени выполнения обратно в идентификатор, используемый в CLI.
- */
-private fun currentModelId(languageModel: LanguageModel): String =
-    when (languageModel.info.name) {
-        "TimewebLanguageModel" -> "timeweb"
-        "HuggingFaceLanguageModel" -> "huggingface"
-        else -> languageModel.info.name.lowercase()
-    }
 
 /**
  * Принудительно прогревает лениво создаваемый токенизатор перед стартом чата, чтобы первая

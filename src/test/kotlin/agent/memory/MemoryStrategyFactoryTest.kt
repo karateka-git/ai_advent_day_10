@@ -1,6 +1,5 @@
 package agent.memory
 
-import agent.lifecycle.NoOpAgentLifecycleListener
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -22,8 +21,7 @@ class MemoryStrategyFactoryTest {
     fun `create returns no compression strategy`() {
         val strategy = MemoryStrategyFactory.create(
             strategyId = "no_compression",
-            languageModel = FactoryTestLanguageModel(),
-            lifecycleListener = NoOpAgentLifecycleListener
+            languageModel = FactoryTestLanguageModel()
         )
 
         assertIs<NoCompressionMemoryStrategy>(strategy)
@@ -33,8 +31,7 @@ class MemoryStrategyFactoryTest {
     fun `create returns summary compression strategy`() {
         val strategy = MemoryStrategyFactory.create(
             strategyId = "summary_compression",
-            languageModel = FactoryTestLanguageModel(),
-            lifecycleListener = NoOpAgentLifecycleListener
+            languageModel = FactoryTestLanguageModel()
         )
 
         assertIs<SummaryCompressionMemoryStrategy>(strategy)

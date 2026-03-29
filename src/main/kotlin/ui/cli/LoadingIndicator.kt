@@ -1,4 +1,4 @@
-package agent.lifecycle
+package ui.cli
 
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
