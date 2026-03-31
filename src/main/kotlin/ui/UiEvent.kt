@@ -4,8 +4,8 @@ import agent.core.AgentInfo
 import agent.core.AgentTokenStats
 import agent.lifecycle.ContextCompressionStats
 import agent.memory.MemoryStrategyOption
-import llm.core.model.LanguageModelOption
 import llm.core.model.ChatRole
+import llm.core.model.LanguageModelOption
 
 /**
  * Типизированные события presentation-слоя, которые описывают, что должно быть показано
@@ -21,7 +21,7 @@ sealed interface UiEvent {
     ) : UiEvent
 
     /**
-     * Нужно показать доступные стратегии памяти перед стартом чата.
+     * Нужно показать доступные стратегии памяти перед пересозданием агента.
      */
     data class MemoryStrategySelectionRequested(
         val options: List<MemoryStrategyOption>

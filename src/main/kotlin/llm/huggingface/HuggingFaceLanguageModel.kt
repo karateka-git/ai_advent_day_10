@@ -19,14 +19,15 @@ import llm.huggingface.tokenizer.Qwen25LocalTokenCounter
 private const val MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 private const val PROVIDER = "featherless-ai"
 private const val API_BASE_URL = "https://router.huggingface.co/v1"
-private const val TEMPERATURE = 0.7
+private const val DEFAULT_TEMPERATURE = 0.7
 
 /**
  * Реализация [LanguageModel] для Hugging Face.
  */
 class HuggingFaceLanguageModel(
     private val httpClient: HttpClient,
-    private val userToken: String
+    private val userToken: String,
+    private val temperature: Double = DEFAULT_TEMPERATURE
 ) : LanguageModel {
     private val json = Json { ignoreUnknownKeys = true }
     private val responseMapper = HuggingFaceChatCompletionResponseMapper()
@@ -42,7 +43,7 @@ class HuggingFaceLanguageModel(
             HuggingFaceChatCompletionRequest(
                 model = "$MODEL:$PROVIDER",
                 messages = messages,
-                temperature = TEMPERATURE
+                temperature = temperature
             )
         )
 

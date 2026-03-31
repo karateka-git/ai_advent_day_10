@@ -7,10 +7,13 @@ import agent.lifecycle.NoOpAgentLifecycleListener
 import agent.memory.model.ConversationSummary
 import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
+import agent.memory.model.StrategyState
+import agent.memory.model.SummaryStrategyState
 import agent.storage.JsonConversationStore
 import agent.storage.mapper.ChatMessageConversationMapper
 import agent.storage.model.ConversationMemoryState
 import agent.storage.model.StoredMemoryMetadata
+import agent.storage.model.StoredStrategyState
 import agent.storage.model.StoredSummary
 import java.nio.file.Path
 import llm.core.LanguageModel
@@ -69,7 +72,7 @@ class DefaultMemoryManager(
     override fun clear() {
         memoryState = MemoryState(
             messages = listOf(createSystemMessage()),
-            metadata = MemoryMetadata(strategyId = memoryStrategy.id)
+            metadata = MemoryMetadata(strategyType = memoryStrategy.type)
         )
         saveState()
     }
@@ -80,10 +83,8 @@ class DefaultMemoryManager(
             "Файл истории $sourcePath пустой или не содержит сообщений."
         }
 
-        memoryState = memoryStrategy.refreshState(
-            importedState.copy(
-                metadata = importedState.metadata.copy(strategyId = memoryStrategy.id)
-            )
+        memoryState = synchronizeStrategyId(
+            memoryStrategy.refreshState(importedState)
         )
         saveState()
     }
@@ -94,16 +95,14 @@ class DefaultMemoryManager(
     private fun loadMemoryState(): MemoryState {
         val savedState = conversationStore.loadState().toMemoryState()
         if (savedState.messages.isNotEmpty()) {
-            return memoryStrategy.refreshState(
-                savedState.copy(
-                    metadata = savedState.metadata.copy(strategyId = memoryStrategy.id)
-                )
+            return synchronizeStrategyId(
+                memoryStrategy.refreshState(savedState)
             )
         }
 
         val initialState = MemoryState(
             messages = listOf(createSystemMessage()),
-            metadata = MemoryMetadata(strategyId = memoryStrategy.id)
+            metadata = MemoryMetadata(strategyType = memoryStrategy.type)
         )
         saveState(initialState)
         return initialState
@@ -117,11 +116,18 @@ class DefaultMemoryManager(
      * Сохраняет текущее состояние памяти, синхронизируя идентификатор активной стратегии.
      */
     private fun saveState(state: MemoryState) {
-        memoryState = state.copy(
-            metadata = state.metadata.copy(strategyId = memoryStrategy.id)
-        )
+        memoryState = synchronizeStrategyId(state)
         conversationStore.saveState(memoryState.toStoredState())
     }
+
+    /**
+     * Синхронизирует metadata с текущей активной стратегией после того,
+     * как стратегия уже обработала входное состояние.
+     */
+    private fun synchronizeStrategyId(state: MemoryState): MemoryState =
+        state.copy(
+            metadata = state.metadata.copy(strategyType = memoryStrategy.type)
+        )
 
     /**
      * Формирует базовое системное сообщение для нового или очищенного диалога.
@@ -159,7 +165,7 @@ class DefaultMemoryManager(
         state: MemoryState,
         notifyCompression: Boolean
     ): MemoryState {
-        val refreshedState = memoryStrategy.refreshState(state)
+        val refreshedState = synchronizeStrategyId(memoryStrategy.refreshState(state))
         if (!notifyCompression || !compressionApplied(state, refreshedState)) {
             return refreshedState
         }
@@ -176,7 +182,7 @@ class DefaultMemoryManager(
     }
 
     /**
-     * Определяет, сжал ли последний проход дополнительные сообщения.
+     * Определяет, изменилось ли покрытие истории rolling summary на последнем проходе.
      */
     private fun compressionApplied(previousState: MemoryState, refreshedState: MemoryState): Boolean =
         refreshedState.metadata.compressedMessagesCount > previousState.metadata.compressedMessagesCount
@@ -187,17 +193,31 @@ class DefaultMemoryManager(
     private fun ConversationMemoryState.toMemoryState(): MemoryState =
         MemoryState(
             messages = messages.map(conversationMapper::fromStoredMessage),
-            summary = summary?.let {
-                ConversationSummary(
-                    content = it.content,
-                    coveredMessagesCount = it.coveredMessagesCount
-                )
-            },
+            strategyState = toRuntimeStrategyState(),
             metadata = MemoryMetadata(
-                strategyId = metadata.strategyId,
+                strategyType = metadata.strategyId?.let(MemoryStrategyType::fromId),
                 compressedMessagesCount = metadata.compressedMessagesCount
             )
         )
+
+    /**
+     * Поддерживает чтение нового strategyState и legacy-поля summary.
+     */
+    private fun ConversationMemoryState.toRuntimeStrategyState(): StrategyState? {
+        val storedStrategyState = strategyState
+        if (storedStrategyState != null) {
+            return when (storedStrategyState.strategyType?.let(MemoryStrategyType::fromId)) {
+                MemoryStrategyType.SUMMARY_COMPRESSION -> SummaryStrategyState(
+                    summary = storedStrategyState.summary?.toRuntimeSummary()
+                )
+                else -> null
+            }
+        }
+
+        return summary?.let { legacySummary ->
+            SummaryStrategyState(summary = legacySummary.toRuntimeSummary())
+        }
+    }
 
     /**
      * Преобразует runtime-модель памяти в сохраняемое JSON-представление.
@@ -205,15 +225,31 @@ class DefaultMemoryManager(
     private fun MemoryState.toStoredState(): ConversationMemoryState =
         ConversationMemoryState(
             messages = messages.map(conversationMapper::toStoredMessage),
-            summary = summary?.let {
-                StoredSummary(
-                    content = it.content,
-                    coveredMessagesCount = it.coveredMessagesCount
-                )
-            },
+            summary = (strategyState as? SummaryStrategyState)?.summary?.toStoredSummary(),
+            strategyState = strategyState?.toStoredStrategyState(),
             metadata = StoredMemoryMetadata(
-                strategyId = metadata.strategyId,
+                strategyId = metadata.strategyType?.id,
                 compressedMessagesCount = metadata.compressedMessagesCount
             )
         )
+
+    private fun StoredSummary.toRuntimeSummary(): ConversationSummary =
+        ConversationSummary(
+            content = content,
+            coveredMessagesCount = coveredMessagesCount
+        )
+
+    private fun ConversationSummary.toStoredSummary(): StoredSummary =
+        StoredSummary(
+            content = content,
+            coveredMessagesCount = coveredMessagesCount
+        )
+
+    private fun StrategyState.toStoredStrategyState(): StoredStrategyState =
+        when (this) {
+            is SummaryStrategyState -> StoredStrategyState(
+                strategyType = strategyType.id,
+                summary = summary?.toStoredSummary()
+            )
+        }
 }

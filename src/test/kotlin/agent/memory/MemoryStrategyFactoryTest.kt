@@ -10,17 +10,21 @@ import llm.core.model.LanguageModelResponse
 
 class MemoryStrategyFactoryTest {
     @Test
-    fun `availableOptions returns both supported strategies`() {
+    fun `availableOptions returns all supported strategies`() {
         assertEquals(
-            listOf("no_compression", "summary_compression"),
-            MemoryStrategyFactory.availableOptions().map { it.id }
+            listOf(
+                MemoryStrategyType.NO_COMPRESSION,
+                MemoryStrategyType.SUMMARY_COMPRESSION,
+                MemoryStrategyType.SLIDING_WINDOW
+            ),
+            MemoryStrategyFactory.availableOptions().map { it.type }
         )
     }
 
     @Test
     fun `create returns no compression strategy`() {
         val strategy = MemoryStrategyFactory.create(
-            strategyId = "no_compression",
+            strategyType = MemoryStrategyType.NO_COMPRESSION,
             languageModel = FactoryTestLanguageModel()
         )
 
@@ -30,11 +34,21 @@ class MemoryStrategyFactoryTest {
     @Test
     fun `create returns summary compression strategy`() {
         val strategy = MemoryStrategyFactory.create(
-            strategyId = "summary_compression",
+            strategyType = MemoryStrategyType.SUMMARY_COMPRESSION,
             languageModel = FactoryTestLanguageModel()
         )
 
         assertIs<SummaryCompressionMemoryStrategy>(strategy)
+    }
+
+    @Test
+    fun `create returns sliding window strategy`() {
+        val strategy = MemoryStrategyFactory.create(
+            strategyType = MemoryStrategyType.SLIDING_WINDOW,
+            languageModel = FactoryTestLanguageModel()
+        )
+
+        assertIs<SlidingWindowMemoryStrategy>(strategy)
     }
 }
 

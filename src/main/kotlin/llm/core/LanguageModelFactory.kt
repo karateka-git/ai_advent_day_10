@@ -8,6 +8,7 @@ import llm.timeweb.TimewebLanguageModel
 
 private const val TIMEWEB_ID = "timeweb"
 private const val HUGGING_FACE_ID = "huggingface"
+private const val DEFAULT_TEMPERATURE = 0.7
 
 /**
  * Создаёт конкретные реализации языковых моделей на основе конфигурации и выбора в CLI.
@@ -16,28 +17,40 @@ object LanguageModelFactory {
     /**
      * Возвращает первую настроенную языковую модель из списка доступных провайдеров.
      */
-    fun createDefault(config: Properties, httpClient: HttpClient): LanguageModel =
+    fun createDefault(
+        config: Properties,
+        httpClient: HttpClient,
+        temperature: Double = DEFAULT_TEMPERATURE
+    ): LanguageModel =
         create(
             modelId = availableModels(config).firstOrNull { it.isConfigured }?.id
                 ?: error("Не найдена ни одна доступная модель. Проверьте токены в config/app.properties."),
             config = config,
-            httpClient = httpClient
+            httpClient = httpClient,
+            temperature = temperature
         )
 
     /**
      * Создаёт реализацию конкретного провайдера по его идентификатору.
      */
-    fun create(modelId: String, config: Properties, httpClient: HttpClient): LanguageModel {
+    fun create(
+        modelId: String,
+        config: Properties,
+        httpClient: HttpClient,
+        temperature: Double = DEFAULT_TEMPERATURE
+    ): LanguageModel {
         return when (modelId.lowercase()) {
             TIMEWEB_ID -> TimewebLanguageModel(
                 httpClient = httpClient,
                 agentId = config.getRequired("AGENT_ID"),
-                userToken = config.getRequired("TIMEWEB_USER_TOKEN")
+                userToken = config.getRequired("TIMEWEB_USER_TOKEN"),
+                temperature = temperature
             )
 
             HUGGING_FACE_ID -> HuggingFaceLanguageModel(
                 httpClient = httpClient,
-                userToken = config.getRequired("HF_API_TOKEN")
+                userToken = config.getRequired("HF_API_TOKEN"),
+                temperature = temperature
             )
 
             else -> error(

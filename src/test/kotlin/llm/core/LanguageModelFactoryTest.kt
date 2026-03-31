@@ -31,4 +31,29 @@ class LanguageModelFactoryTest {
 
         assertEquals("TimewebLanguageModel", model.info.name)
     }
+
+    @Test
+    fun `create supports explicit temperature override`() {
+        val config = Properties().apply {
+            setProperty("AGENT_ID", "agent")
+            setProperty("TIMEWEB_USER_TOKEN", "token")
+            setProperty("HF_API_TOKEN", "token")
+        }
+
+        val timewebModel = LanguageModelFactory.create(
+            modelId = "timeweb",
+            config = config,
+            httpClient = HttpClient.newHttpClient(),
+            temperature = 0.0
+        )
+        val huggingFaceModel = LanguageModelFactory.create(
+            modelId = "huggingface",
+            config = config,
+            httpClient = HttpClient.newHttpClient(),
+            temperature = 0.0
+        )
+
+        assertEquals("TimewebLanguageModel", timewebModel.info.name)
+        assertEquals("HuggingFaceLanguageModel", huggingFaceModel.info.name)
+    }
 }

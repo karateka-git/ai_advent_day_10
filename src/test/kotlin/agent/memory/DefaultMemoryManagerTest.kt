@@ -2,9 +2,15 @@ package agent.memory
 
 import agent.lifecycle.AgentLifecycleListener
 import agent.lifecycle.ContextCompressionStats
+import agent.memory.MemoryStrategyType
+import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
 import agent.memory.summarizer.ConversationSummarizer
 import agent.storage.JsonConversationStore
+import agent.storage.model.ConversationMemoryState
+import agent.storage.model.StoredMemoryMetadata
+import agent.storage.model.StoredMessage
+import agent.storage.model.StoredSummary
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -110,7 +116,7 @@ class DefaultMemoryManagerTest {
     }
 
     @Test
-    fun `summary strategy compresses history before model request and reports token stats`() {
+    fun `summary strategy compresses history before model request but keeps full conversation`() {
         val tempDir = Files.createTempDirectory("memory-manager-test")
         val store = JsonConversationStore(tempDir.resolve("conversation.json"))
         val lifecycleListener = RecordingAgentLifecycleListener()
@@ -160,6 +166,8 @@ class DefaultMemoryManagerTest {
         assertEquals(
             listOf(
                 ChatMessage(role = ChatRole.SYSTEM, content = "Системное сообщение"),
+                ChatMessage(role = ChatRole.USER, content = "u1"),
+                ChatMessage(role = ChatRole.ASSISTANT, content = "a1"),
                 ChatMessage(role = ChatRole.USER, content = "u2"),
                 ChatMessage(role = ChatRole.ASSISTANT, content = "a2"),
                 ChatMessage(role = ChatRole.USER, content = "u3")
@@ -172,6 +180,47 @@ class DefaultMemoryManagerTest {
         assertNotNull(stats.tokensAfter)
         assertNotNull(stats.savedTokens)
         assertEquals(stats.tokensBefore - stats.tokensAfter, stats.savedTokens)
+    }
+
+    @Test
+    fun `switching from summary state to no compression keeps full stored history`() {
+        val tempDir = Files.createTempDirectory("memory-manager-test")
+        val store = JsonConversationStore(tempDir.resolve("conversation.json"))
+        store.saveState(
+            ConversationMemoryState(
+                messages = listOf(
+                    StoredMessage(role = "system", content = "Системное сообщение"),
+                    StoredMessage(role = "user", content = "u1"),
+                    StoredMessage(role = "assistant", content = "a1"),
+                    StoredMessage(role = "user", content = "u2")
+                ),
+                summary = StoredSummary(
+                    content = "Сжатый фрагмент",
+                    coveredMessagesCount = 2
+                ),
+                metadata = StoredMemoryMetadata(
+                    strategyId = "summary_compression",
+                    compressedMessagesCount = 2
+                )
+            )
+        )
+
+        val manager = DefaultMemoryManager(
+            languageModel = FakeLanguageModel(),
+            systemPrompt = "Системное сообщение",
+            conversationStore = store,
+            memoryStrategy = NoCompressionMemoryStrategy()
+        )
+
+        assertEquals(
+            listOf(
+                ChatMessage(role = ChatRole.SYSTEM, content = "Системное сообщение"),
+                ChatMessage(role = ChatRole.USER, content = "u1"),
+                ChatMessage(role = ChatRole.ASSISTANT, content = "a1"),
+                ChatMessage(role = ChatRole.USER, content = "u2")
+            ),
+            manager.currentConversation()
+        )
     }
 }
 
@@ -215,7 +264,7 @@ private class CharacterTokenCounter : TokenCounter {
 }
 
 private class LastMessageOnlyStrategy : MemoryStrategy {
-    override val id: String = "last_message_only"
+    override val type: MemoryStrategyType = MemoryStrategyType.NO_COMPRESSION
 
     override fun effectiveContext(state: MemoryState): List<ChatMessage> =
         state.messages.takeLast(1)

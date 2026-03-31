@@ -21,7 +21,7 @@ class CliRenderer(
             }
 
             is UiEvent.MemoryStrategySelectionRequested -> {
-                println("Выберите стратегию памяти перед стартом агента:")
+                println("Выберите стратегию памяти для нового агента:")
                 event.options.forEachIndexed { index, option ->
                     println("${index + 1}. ${option.displayName} - ${option.description}")
                 }
@@ -33,6 +33,7 @@ class CliRenderer(
 
             is UiEvent.MemoryStrategySelected -> {
                 println("Выбрана стратегия: ${event.option.displayName}")
+                println("Как работает: ${event.option.description}")
             }
 
             UiEvent.MemoryStrategySelectionRejected -> {
@@ -44,6 +45,7 @@ class CliRenderer(
                 println("Описание: ${event.info.description}")
                 println("Модель: ${event.info.model}")
                 println("Стратегия памяти: ${event.strategy.displayName}")
+                println("Поведение стратегии: ${event.strategy.description}")
             }
 
             is UiEvent.ModelsAvailable -> {

@@ -4,6 +4,7 @@ import agent.lifecycle.AgentLifecycleListener
 import agent.lifecycle.UiEventLifecycleListener
 import agent.memory.MemoryStrategyFactory
 import agent.memory.MemoryStrategyOption
+import agent.memory.MemoryStrategyType
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.http.HttpClient
@@ -28,8 +29,8 @@ private val systemConsole = System.console()
 /**
  * Точка входа CLI-приложения.
  *
- * Приложение загружает конфигурацию, выбирает LLM-провайдер, предлагает пользователю выбрать
- * стратегию памяти и затем запускает интерактивный цикл чата.
+ * Приложение загружает конфигурацию, выбирает LLM-провайдер, создаёт агента
+ * со стратегией памяти по умолчанию и затем запускает интерактивный цикл чата.
  */
 fun main() {
     val config = loadConfig()
@@ -43,18 +44,18 @@ fun main() {
     )
     warmUpTokenCounter(languageModel, lifecycleListener)
 
-    val selectedMemoryStrategyOption = selectMemoryStrategyOption(uiEventSink)
+    val defaultMemoryStrategyOption = MemoryStrategyFactory.defaultOption()
     val agent: Agent<String> = createAgent(
         languageModel = languageModel,
         lifecycleListener = lifecycleListener,
-        strategyId = selectedMemoryStrategyOption.id
+        strategyType = defaultMemoryStrategyOption.type
     )
     val sessionController = CliSessionController(
         initialState = CliSessionState(
             modelId = defaultModelId(config),
             languageModel = languageModel,
             agent = agent,
-            memoryStrategyOption = selectedMemoryStrategyOption
+            memoryStrategyOption = defaultMemoryStrategyOption
         ),
         config = config,
         httpClient = httpClient,
@@ -62,6 +63,7 @@ fun main() {
         uiEventSink = uiEventSink,
         createLanguageModel = LanguageModelFactory::create,
         createAgent = ::createAgent,
+        selectMemoryStrategy = { selectMemoryStrategyOption(uiEventSink) },
         warmUpLanguageModel = ::warmUpTokenCounter
     )
 
@@ -74,7 +76,7 @@ fun main() {
     uiEventSink.emit(
         UiEvent.AgentInfoAvailable(
             info = sessionController.state.agent.info,
-            strategy = selectedMemoryStrategyOption
+            strategy = defaultMemoryStrategyOption
         )
     )
 
@@ -104,19 +106,19 @@ private fun defaultModelId(config: Properties): String =
 private fun createAgent(
     languageModel: LanguageModel,
     lifecycleListener: AgentLifecycleListener,
-    strategyId: String
+    strategyType: MemoryStrategyType
 ): Agent<String> =
     MrAgent(
         languageModel = languageModel,
         lifecycleListener = lifecycleListener,
         memoryStrategy = MemoryStrategyFactory.create(
-            strategyId = strategyId,
+            strategyType = strategyType,
             languageModel = languageModel
         )
     )
 
 /**
- * Предлагает пользователю выбрать одну из доступных стратегий памяти перед стартом чата.
+ * Предлагает пользователю выбрать одну из доступных стратегий памяти при смене модели.
  */
 private fun selectMemoryStrategyOption(uiEventSink: UiEventSink): MemoryStrategyOption {
     val options = MemoryStrategyFactory.availableOptions()

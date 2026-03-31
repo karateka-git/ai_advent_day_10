@@ -7,6 +7,7 @@ import agent.format.TextResponseFormat
 import agent.lifecycle.AgentLifecycleListener
 import agent.lifecycle.NoOpAgentLifecycleListener
 import agent.memory.MemoryStrategyOption
+import agent.memory.MemoryStrategyType
 import java.net.http.HttpClient
 import java.nio.file.Path
 import java.util.Properties
@@ -26,7 +27,7 @@ class CliSessionControllerTest {
     private val httpClient = HttpClient.newHttpClient()
     private val lifecycleListener: AgentLifecycleListener = NoOpAgentLifecycleListener
     private val strategyOption = MemoryStrategyOption(
-        id = "summary_compression",
+        type = MemoryStrategyType.SUMMARY_COMPRESSION,
         displayName = "Сжатие через summary",
         description = "Тестовая стратегия."
     )
@@ -65,32 +66,40 @@ class CliSessionControllerTest {
         )
 
         val result = controller.handle("models")
-        val expectedEvents: List<UiEvent> = listOf(
-            UiEvent.ModelsAvailable(
-                options = listOf(
-                    LanguageModelOption(
-                        id = "timeweb",
-                        displayName = "Timeweb",
-                        isConfigured = true
-                    )
-                ),
-                currentModelId = "timeweb"
-            )
-        )
 
         assertEquals(CliSessionControllerResult.Continue, result)
-        assertEquals(expectedEvents, sink.events)
+        assertEquals(
+            listOf<UiEvent>(
+                UiEvent.ModelsAvailable(
+                    options = listOf(
+                        LanguageModelOption(
+                            id = "timeweb",
+                            displayName = "Timeweb",
+                            isConfigured = true
+                        )
+                    ),
+                    currentModelId = "timeweb"
+                )
+            ),
+            sink.events
+        )
     }
 
     @Test
-    fun `switches model and updates session state`() {
+    fun `switches model asks for memory strategy and updates session state`() {
         val sink = RecordingUiEventSink()
         val createdModel = FakeLanguageModel(
             name = "HuggingFaceLanguageModel",
             model = "hf-model"
         )
         val recreatedAgent = FakeAgent(model = "hf-model")
+        val slidingWindowOption = MemoryStrategyOption(
+            type = MemoryStrategyType.SLIDING_WINDOW,
+            displayName = "Скользящее окно",
+            description = "Тестовая стратегия."
+        )
         var warmUpCalls = 0
+        var selectionCalls = 0
         val controller = createController(
             sink = sink,
             createLanguageModel = { modelId, _, _ ->
@@ -99,8 +108,12 @@ class CliSessionControllerTest {
             },
             createAgent = { languageModel, _, strategyId ->
                 assertSame(createdModel, languageModel)
-                assertEquals(strategyOption.id, strategyId)
+                assertEquals(slidingWindowOption.type, strategyId)
                 recreatedAgent
+            },
+            selectMemoryStrategy = {
+                selectionCalls++
+                slidingWindowOption
             },
             warmUpLanguageModel = { languageModel, _ ->
                 assertSame(createdModel, languageModel)
@@ -114,13 +127,15 @@ class CliSessionControllerTest {
         assertEquals("huggingface", controller.state.modelId)
         assertSame(createdModel, controller.state.languageModel)
         assertSame(recreatedAgent, controller.state.agent)
+        assertEquals(slidingWindowOption, controller.state.memoryStrategyOption)
+        assertEquals(1, selectionCalls)
         assertEquals(1, warmUpCalls)
         assertEquals(
             listOf(
                 UiEvent.ModelChanged,
                 UiEvent.AgentInfoAvailable(
                     info = recreatedAgent.info,
-                    strategy = strategyOption
+                    strategy = slidingWindowOption
                 )
             ),
             sink.events
@@ -149,12 +164,12 @@ class CliSessionControllerTest {
         )
 
         val result = controller.handle("use unknown")
-        val expectedEvents: List<UiEvent> = listOf(
-            UiEvent.ModelSwitchFailed("Неизвестная модель")
-        )
 
         assertEquals(CliSessionControllerResult.Continue, result)
-        assertEquals(expectedEvents, sink.events)
+        assertEquals(
+            listOf<UiEvent>(UiEvent.ModelSwitchFailed("Неизвестная модель")),
+            sink.events
+        )
     }
 
     @Test
@@ -198,9 +213,10 @@ class CliSessionControllerTest {
             error("Не должен вызываться в этом тесте.")
         },
         availableModelsProvider: (Properties) -> List<LanguageModelOption> = { emptyList() },
-        createAgent: (LanguageModel, AgentLifecycleListener, String) -> Agent<String> = { _, _, _ ->
+        createAgent: (LanguageModel, AgentLifecycleListener, MemoryStrategyType) -> Agent<String> = { _, _, _ ->
             error("Не должен вызываться в этом тесте.")
         },
+        selectMemoryStrategy: () -> MemoryStrategyOption = { strategyOption },
         warmUpLanguageModel: (LanguageModel, AgentLifecycleListener) -> Unit = { _, _ -> Unit }
     ): CliSessionController =
         CliSessionController(
@@ -212,6 +228,7 @@ class CliSessionControllerTest {
             createLanguageModel = createLanguageModel,
             availableModelsProvider = availableModelsProvider,
             createAgent = createAgent,
+            selectMemoryStrategy = selectMemoryStrategy,
             warmUpLanguageModel = warmUpLanguageModel
         )
 

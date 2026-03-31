@@ -1,5 +1,7 @@
 import agent.core.Agent
 import agent.lifecycle.AgentLifecycleListener
+import agent.memory.MemoryStrategyOption
+import agent.memory.MemoryStrategyType
 import java.net.http.HttpClient
 import java.util.Properties
 import llm.core.LanguageModel
@@ -21,7 +23,8 @@ class CliSessionController(
     private val commandParser: CliCommandParser = CliCommandParser(),
     private val createLanguageModel: (String, Properties, HttpClient) -> LanguageModel,
     private val availableModelsProvider: (Properties) -> List<LanguageModelOption> = LanguageModelFactory::availableModels,
-    private val createAgent: (LanguageModel, AgentLifecycleListener, String) -> Agent<String>,
+    private val createAgent: (LanguageModel, AgentLifecycleListener, MemoryStrategyType) -> Agent<String>,
+    private val selectMemoryStrategy: () -> MemoryStrategyOption,
     private val warmUpLanguageModel: (LanguageModel, AgentLifecycleListener) -> Unit
 ) {
     /**
@@ -90,21 +93,23 @@ class CliSessionController(
                 httpClient
             )
             warmUpLanguageModel(languageModel, lifecycleListener)
+            val selectedStrategy = selectMemoryStrategy()
             val agent = createAgent(
                 languageModel,
                 lifecycleListener,
-                state.memoryStrategyOption.id
+                selectedStrategy.type
             )
             state = state.copy(
                 modelId = requestedModelId,
                 languageModel = languageModel,
-                agent = agent
+                agent = agent,
+                memoryStrategyOption = selectedStrategy
             )
             uiEventSink.emit(UiEvent.ModelChanged)
             uiEventSink.emit(
                 UiEvent.AgentInfoAvailable(
                     info = agent.info,
-                    strategy = state.memoryStrategyOption
+                    strategy = selectedStrategy
                 )
             )
         } catch (error: Exception) {

@@ -7,6 +7,6 @@ import llm.core.model.ChatMessage
  */
 data class MemoryState(
     val messages: List<ChatMessage> = emptyList(),
-    val summary: ConversationSummary? = null,
+    val strategyState: StrategyState? = null,
     val metadata: MemoryMetadata = MemoryMetadata()
 )
