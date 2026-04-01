@@ -37,6 +37,7 @@ fun main() {
     val linearScenario = defaultTechnicalSpecificationScenario()
         .limitedToConfiguredSteps()
     val branchingScenario = defaultBranchingScenario()
+        .limitedToConfiguredSteps()
     val judgeEnabled = System.getProperty(COMPARISON_JUDGE_PROPERTY)?.toBooleanStrictOrNull() == true
     val reportPath = Path.of("build", "reports", "strategy-comparison", "report.json")
     val strategies = selectedStrategies()
@@ -265,6 +266,60 @@ private fun StrategyComparisonScenario.limitedToConfiguredSteps(): StrategyCompa
     }
 
     return copy(prompts = prompts.take(configuredSteps))
+}
+
+/**
+ * Возвращает branch-сценарий, ограниченный общим числом модельных шагов из системного свойства.
+ *
+ * Шаги распределяются так, чтобы по возможности сохранить обе ветки:
+ * - при 1 шаге остаётся только общая часть;
+ * - при 2 шагах даётся по одному prompt в каждую ветку;
+ * - при 3+ шагах резервируется по одному prompt на каждую ветку, остальное уходит в shared-часть.
+ */
+private fun BranchingComparisonScenario.limitedToConfiguredSteps(): BranchingComparisonScenario {
+    val configuredSteps = System.getProperty(COMPARISON_STEPS_PROPERTY)?.toIntOrNull()
+        ?: return this
+    if (configuredSteps <= 0) {
+        return this
+    }
+
+    val totalAvailableSteps = sharedPrompts.size + firstBranchPrompts.size + secondBranchPrompts.size
+    val limitedSteps = configuredSteps.coerceAtMost(totalAvailableSteps)
+
+    if (limitedSteps == totalAvailableSteps) {
+        return this
+    }
+
+    val sharedCount: Int
+    val firstBranchCount: Int
+    val secondBranchCount: Int
+
+    when {
+        limitedSteps <= 1 -> {
+            sharedCount = limitedSteps
+            firstBranchCount = 0
+            secondBranchCount = 0
+        }
+
+        limitedSteps == 2 -> {
+            sharedCount = 0
+            firstBranchCount = 1
+            secondBranchCount = 1
+        }
+
+        else -> {
+            sharedCount = (limitedSteps - 2).coerceAtMost(sharedPrompts.size)
+            val remainingSteps = limitedSteps - sharedCount
+            firstBranchCount = remainingSteps / 2
+            secondBranchCount = remainingSteps - firstBranchCount
+        }
+    }
+
+    return copy(
+        sharedPrompts = sharedPrompts.take(sharedCount),
+        firstBranchPrompts = firstBranchPrompts.take(firstBranchCount),
+        secondBranchPrompts = secondBranchPrompts.take(secondBranchCount)
+    )
 }
 
 private fun buildLinearScenarioDescription(scenario: StrategyComparisonScenario): String =
