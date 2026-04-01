@@ -1,16 +1,18 @@
-﻿package agent.memory.core
+package agent.memory.core
 
+import agent.capability.AgentCapability
+import agent.capability.BranchingCapability
 import agent.core.AgentTokenStats
 import agent.core.BranchCheckpointInfo
 import agent.core.BranchInfo
 import agent.core.BranchingStatus
-import agent.memory.branching.BranchCoordinator
 import agent.lifecycle.AgentLifecycleListener
 import agent.lifecycle.ContextCompressionStats
 import agent.lifecycle.NoOpAgentLifecycleListener
+import agent.memory.branching.BranchCoordinator
 import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
-import agent.memory.persistence.MemoryStateStorageMapper
+import agent.memory.persistence.ConversationMemoryStateMapper
 import agent.memory.strategy.MemoryStrategyType
 import agent.memory.strategy.NoCompressionMemoryStrategy
 import agent.storage.JsonConversationStore
@@ -31,12 +33,31 @@ class DefaultMemoryManager(
     private val conversationStore: JsonConversationStore = JsonConversationStore.forLanguageModel(languageModel),
     private val memoryStrategy: MemoryStrategy = NoCompressionMemoryStrategy(),
     private val lifecycleListener: AgentLifecycleListener = NoOpAgentLifecycleListener,
-    private val stateMapper: MemoryStateStorageMapper = MemoryStateStorageMapper(),
+    private val stateMapper: ConversationMemoryStateMapper = ConversationMemoryStateMapper(),
     private val branchCoordinator: BranchCoordinator = BranchCoordinator()
 ) : MemoryManager {
     private var memoryState = loadMemoryState()
 
+    private val branchingCapability = object : BranchingCapability {
+        override fun createCheckpoint(name: String?): BranchCheckpointInfo =
+            this@DefaultMemoryManager.createCheckpoint(name)
+
+        override fun createBranch(name: String): BranchInfo =
+            this@DefaultMemoryManager.createBranch(name)
+
+        override fun switchBranch(name: String): BranchInfo =
+            this@DefaultMemoryManager.switchBranch(name)
+
+        override fun branchStatus(): BranchingStatus =
+            this@DefaultMemoryManager.branchStatus()
+    }
+
     override fun currentConversation(): List<ChatMessage> = memoryState.messages.toList()
+
+    override fun <TCapability : AgentCapability> capability(capabilityType: Class<TCapability>): TCapability? =
+        branchingCapability
+            .takeIf { memoryStrategy.type == MemoryStrategyType.BRANCHING && capabilityType.isInstance(it) }
+            ?.let(capabilityType::cast)
 
     override fun previewTokenStats(userPrompt: String): AgentTokenStats {
         val effectiveConversation = effectiveConversation()
@@ -84,7 +105,7 @@ class DefaultMemoryManager(
     }
 
     override fun replaceContextFromFile(sourcePath: Path) {
-        val importedState = stateMapper.fromStored(JsonConversationStore(sourcePath).loadState())
+        val importedState = stateMapper.toRuntime(JsonConversationStore(sourcePath).loadState())
         require(importedState.messages.isNotEmpty()) {
             "Файл истории $sourcePath пустой или не содержит сообщений."
         }
@@ -95,40 +116,11 @@ class DefaultMemoryManager(
         saveState()
     }
 
-    override fun createCheckpoint(name: String?): BranchCheckpointInfo {
-        requireBranchingEnabled()
-        val result = branchCoordinator.createCheckpoint(memoryState, name)
-        memoryState = result.state
-        saveState()
-        return result.info
-    }
-
-    override fun createBranch(name: String): BranchInfo {
-        requireBranchingEnabled()
-        val result = branchCoordinator.createBranch(memoryState, name)
-        memoryState = result.state
-        saveState()
-        return result.info
-    }
-
-    override fun switchBranch(name: String): BranchInfo {
-        requireBranchingEnabled()
-        val result = branchCoordinator.switchBranch(memoryState, name)
-        memoryState = result.state
-        saveState()
-        return result.info
-    }
-
-    override fun branchStatus(): BranchingStatus {
-        requireBranchingEnabled()
-        return branchCoordinator.branchStatus(memoryState)
-    }
-
     /**
      * Загружает сохранённое состояние памяти с диска или создаёт новое с системным сообщением.
      */
     private fun loadMemoryState(): MemoryState {
-        val savedState = stateMapper.fromStored(conversationStore.loadState())
+        val savedState = stateMapper.toRuntime(conversationStore.loadState())
         if (savedState.messages.isNotEmpty()) {
             return synchronizeStrategyId(
                 memoryStrategy.refreshState(savedState, MemoryStateRefreshMode.REGULAR)
@@ -224,11 +216,38 @@ class DefaultMemoryManager(
     private fun compressionApplied(previousState: MemoryState, refreshedState: MemoryState): Boolean =
         refreshedState.metadata.compressedMessagesCount > previousState.metadata.compressedMessagesCount
 
+    private fun createCheckpoint(name: String?): BranchCheckpointInfo {
+        requireBranchingEnabled()
+        val result = branchCoordinator.createCheckpoint(memoryState, name)
+        memoryState = result.state
+        saveState()
+        return result.info
+    }
+
+    private fun createBranch(name: String): BranchInfo {
+        requireBranchingEnabled()
+        val result = branchCoordinator.createBranch(memoryState, name)
+        memoryState = result.state
+        saveState()
+        return result.info
+    }
+
+    private fun switchBranch(name: String): BranchInfo {
+        requireBranchingEnabled()
+        val result = branchCoordinator.switchBranch(memoryState, name)
+        memoryState = result.state
+        saveState()
+        return result.info
+    }
+
+    private fun branchStatus(): BranchingStatus {
+        requireBranchingEnabled()
+        return branchCoordinator.branchStatus(memoryState)
+    }
+
     private fun requireBranchingEnabled() {
         require(memoryStrategy.type == MemoryStrategyType.BRANCHING) {
             "Команды ветвления доступны только для стратегии Branching."
         }
     }
 }
-
-

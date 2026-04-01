@@ -1,9 +1,7 @@
-﻿package agent.memory.core
+package agent.memory.core
 
+import agent.capability.AgentCapability
 import agent.core.AgentTokenStats
-import agent.core.BranchCheckpointInfo
-import agent.core.BranchInfo
-import agent.core.BranchingStatus
 import java.nio.file.Path
 import llm.core.model.ChatMessage
 
@@ -43,24 +41,7 @@ interface MemoryManager {
     fun replaceContextFromFile(sourcePath: Path)
 
     /**
-     * Создаёт checkpoint из текущей активной ветки.
+     * Возвращает дополнительную capability текущей стратегии памяти, если она поддерживается.
      */
-    fun createCheckpoint(name: String? = null): BranchCheckpointInfo
-
-    /**
-     * Создаёт новую ветку из последнего checkpoint.
-     */
-    fun createBranch(name: String): BranchInfo
-
-    /**
-     * Переключает активную ветку.
-     */
-    fun switchBranch(name: String): BranchInfo
-
-    /**
-     * Возвращает состояние ветвления для текущего диалога.
-     */
-    fun branchStatus(): BranchingStatus
+    fun <TCapability : AgentCapability> capability(capabilityType: Class<TCapability>): TCapability?
 }
-
-

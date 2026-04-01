@@ -233,6 +233,20 @@ class DefaultMemoryManagerTest {
     }
 
     @Test
+    fun `non branching strategy does not expose branching capability`() {
+        val tempDir = Files.createTempDirectory("memory-manager-test")
+        val store = JsonConversationStore(tempDir.resolve("conversation.json"))
+        val manager = DefaultMemoryManager(
+            languageModel = FakeLanguageModel(),
+            systemPrompt = "Системное сообщение",
+            conversationStore = store,
+            memoryStrategy = NoCompressionMemoryStrategy()
+        )
+
+        kotlin.test.assertNull(manager.capability(agent.capability.BranchingCapability::class.java))
+    }
+
+    @Test
     fun `branching strategy keeps independent histories for different branches`() {
         val tempDir = Files.createTempDirectory("memory-manager-test")
         val store = JsonConversationStore(tempDir.resolve("conversation.json"))
@@ -242,23 +256,26 @@ class DefaultMemoryManagerTest {
             conversationStore = store,
             memoryStrategy = BranchingMemoryStrategy()
         )
+        val branchingCapability = checkNotNull(
+            manager.capability(agent.capability.BranchingCapability::class.java)
+        )
 
         manager.appendUserMessage("main-u1")
         manager.appendAssistantMessage("main-a1")
 
         assertEquals(
             "checkpoint-1",
-            manager.createCheckpoint().name
+            branchingCapability.createCheckpoint().name
         )
-        assertEquals("option-a", manager.createBranch("option-a").name)
-        assertEquals("option-b", manager.createBranch("option-b").name)
+        assertEquals("option-a", branchingCapability.createBranch("option-a").name)
+        assertEquals("option-b", branchingCapability.createBranch("option-b").name)
 
-        manager.switchBranch("option-a")
+        branchingCapability.switchBranch("option-a")
         manager.appendUserMessage("a-u1")
         manager.appendAssistantMessage("a-a1")
         val optionAConversation = manager.currentConversation()
 
-        manager.switchBranch("option-b")
+        branchingCapability.switchBranch("option-b")
         manager.appendUserMessage("b-u1")
         manager.appendAssistantMessage("b-a1")
         val optionBConversation = manager.currentConversation()
@@ -283,7 +300,7 @@ class DefaultMemoryManagerTest {
             ),
             optionBConversation
         )
-        assertEquals("option-b", manager.branchStatus().activeBranchName)
+        assertEquals("option-b", branchingCapability.branchStatus().activeBranchName)
     }
 }
 

@@ -1,5 +1,7 @@
 package ui.cli
 
+import agent.capability.BranchingCapability
+import agent.capability.capability
 import agent.core.Agent
 import agent.lifecycle.AgentLifecycleListener
 import agent.memory.strategy.MemoryStrategyOption
@@ -64,9 +66,11 @@ class CliSessionController(
 
             is CliCommand.CreateCheckpoint -> {
                 try {
+                    val branchingCapability = state.agent.capability<BranchingCapability>()
+                        ?: error("Команды ветвления доступны только для стратегии Branching.")
                     appEventSink.emit(
                         AppEvent.CheckpointCreated(
-                            state.agent.createCheckpoint(command.name)
+                            branchingCapability.createCheckpoint(command.name)
                         )
                     )
                 } catch (error: Exception) {
@@ -77,7 +81,9 @@ class CliSessionController(
 
             CliCommand.ShowBranches -> {
                 try {
-                    appEventSink.emit(AppEvent.BranchStatusAvailable(state.agent.branchStatus()))
+                    val branchingCapability = state.agent.capability<BranchingCapability>()
+                        ?: error("Команды ветвления доступны только для стратегии Branching.")
+                    appEventSink.emit(AppEvent.BranchStatusAvailable(branchingCapability.branchStatus()))
                 } catch (error: Exception) {
                     appEventSink.emit(AppEvent.RequestFailed(error.message))
                 }
@@ -86,7 +92,9 @@ class CliSessionController(
 
             is CliCommand.CreateBranch -> {
                 try {
-                    appEventSink.emit(AppEvent.BranchCreated(state.agent.createBranch(command.name)))
+                    val branchingCapability = state.agent.capability<BranchingCapability>()
+                        ?: error("Команды ветвления доступны только для стратегии Branching.")
+                    appEventSink.emit(AppEvent.BranchCreated(branchingCapability.createBranch(command.name)))
                 } catch (error: Exception) {
                     appEventSink.emit(AppEvent.RequestFailed(error.message))
                 }
@@ -95,7 +103,9 @@ class CliSessionController(
 
             is CliCommand.SwitchBranch -> {
                 try {
-                    appEventSink.emit(AppEvent.BranchSwitched(state.agent.switchBranch(command.name)))
+                    val branchingCapability = state.agent.capability<BranchingCapability>()
+                        ?: error("Команды ветвления доступны только для стратегии Branching.")
+                    appEventSink.emit(AppEvent.BranchSwitched(branchingCapability.switchBranch(command.name)))
                 } catch (error: Exception) {
                     appEventSink.emit(AppEvent.RequestFailed(error.message))
                 }

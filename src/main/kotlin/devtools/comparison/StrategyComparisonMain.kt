@@ -2,19 +2,15 @@
 
 import agent.memory.strategy.MemoryStrategyFactory
 import agent.memory.strategy.MemoryStrategyType
+import bootstrap.ApplicationBootstrap
 import java.io.FileDescriptor
 import java.io.FileOutputStream
 import java.io.PrintStream
-import java.net.http.HttpClient
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.Properties
 import kotlinx.serialization.json.Json
-import llm.core.LanguageModel
-import llm.core.LanguageModelFactory
 
-private const val CONFIG_FILE = "config/app.properties"
 private const val COMPARISON_TEMPERATURE = 0.0
 private const val COMPARISON_STEPS_PROPERTY = "comparison.steps"
 private const val COMPARISON_JUDGE_PROPERTY = "comparison.judge"
@@ -30,17 +26,13 @@ private val reportJson = Json {
 fun main() {
     configureUtf8Console()
 
-    val config = loadConfig()
-    val httpClient = HttpClient.newHttpClient()
-    val selectedModelId = defaultModelId(config)
-    val languageModel = LanguageModelFactory.create(
-        modelId = selectedModelId,
-        config = config,
-        httpClient = httpClient,
+    val runtime = ApplicationBootstrap.createRuntime(
         temperature = COMPARISON_TEMPERATURE
     )
+    val selectedModelId = runtime.selectedModelId
+    val languageModel = runtime.languageModel
 
-    warmUpTokenCounter(languageModel)
+    ApplicationBootstrap.warmUpTokenCounter(languageModel)
 
     val linearScenario = defaultTechnicalSpecificationScenario()
         .limitedToConfiguredSteps()
@@ -310,33 +302,4 @@ private fun saveReport(
     )
 }
 
-/**
- * Принудительно прогревает локальный токенизатор до старта серии сравнений.
- */
-private fun warmUpTokenCounter(languageModel: LanguageModel) {
-    languageModel.tokenCounter?.countText("")
-}
-
-/**
- * Возвращает идентификатор первой настроенной модели, доступной в конфигурации.
- */
-private fun defaultModelId(config: Properties): String =
-    LanguageModelFactory.availableModels(config)
-        .firstOrNull { it.isConfigured }
-        ?.id
-        ?: error("Не найдена ни одна доступная модель. Проверьте токены в config/app.properties.")
-
-/**
- * Загружает локальный конфиг приложения, используемый comparison runner.
- */
-private fun loadConfig(): Properties {
-    val configPath = Path.of(CONFIG_FILE)
-    require(Files.exists(configPath)) {
-        "Файл конфигурации $CONFIG_FILE не найден. Создайте его на основе config/app.properties.example."
-    }
-
-    return Properties().apply {
-        Files.newInputStream(configPath).use(::load)
-    }
-}
 

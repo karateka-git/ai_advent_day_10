@@ -5,13 +5,10 @@ import agent.lifecycle.AppEventLifecycleListener
 import agent.memory.strategy.MemoryStrategyFactory
 import agent.memory.strategy.MemoryStrategyOption
 import agent.memory.strategy.MemoryStrategyType
+import bootstrap.ApplicationBootstrap
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.net.http.HttpClient
 import java.nio.charset.Charset
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.Properties
 import llm.core.LanguageModel
 import llm.core.LanguageModelFactory
 import llm.core.model.ChatRole
@@ -22,8 +19,6 @@ import ui.cli.CliSessionController
 import ui.cli.CliSessionControllerResult
 import ui.cli.CliSessionState
 import ui.cli.CliRenderer
-
-private const val CONFIG_FILE = "config/app.properties"
 
 private val consoleReader = BufferedReader(
     InputStreamReader(System.`in`, detectConsoleCharset())
@@ -37,16 +32,15 @@ private val systemConsole = System.console()
  * со стратегией памяти по умолчанию и затем запускает интерактивный цикл чата.
  */
 fun main() {
-    val config = loadConfig()
-    val httpClient = HttpClient.newHttpClient()
+    val runtime = ApplicationBootstrap.createRuntime()
     val appEventSink: AppEventSink = CliRenderer()
     val lifecycleListener: AgentLifecycleListener = AppEventLifecycleListener(appEventSink)
-
-    val languageModel: LanguageModel = LanguageModelFactory.createDefault(
-        config = config,
-        httpClient = httpClient
+    val languageModel = runtime.languageModel
+    ApplicationBootstrap.warmUpTokenCounter(
+        languageModel = languageModel,
+        onStarted = lifecycleListener::onModelWarmupStarted,
+        onFinished = lifecycleListener::onModelWarmupFinished
     )
-    warmUpTokenCounter(languageModel, lifecycleListener)
 
     val defaultMemoryStrategyOption = MemoryStrategyFactory.defaultOption()
     val agent: Agent<String> = createAgent(
@@ -56,19 +50,25 @@ fun main() {
     )
     val sessionController = CliSessionController(
         initialState = CliSessionState(
-            modelId = defaultModelId(config),
+            modelId = runtime.selectedModelId,
             languageModel = languageModel,
             agent = agent,
             memoryStrategyOption = defaultMemoryStrategyOption
         ),
-        config = config,
-        httpClient = httpClient,
+        config = runtime.config,
+        httpClient = runtime.httpClient,
         lifecycleListener = lifecycleListener,
         appEventSink = appEventSink,
         createLanguageModel = LanguageModelFactory::create,
         createAgent = ::createAgent,
         selectMemoryStrategy = { selectMemoryStrategyOption(appEventSink) },
-        warmUpLanguageModel = ::warmUpTokenCounter
+        warmUpLanguageModel = { model, listener ->
+            ApplicationBootstrap.warmUpTokenCounter(
+                languageModel = model,
+                onStarted = listener::onModelWarmupStarted,
+                onFinished = listener::onModelWarmupFinished
+            )
+        }
     )
 
     appEventSink.emit(
@@ -94,15 +94,6 @@ fun main() {
         }
     }
 }
-
-/**
- * Возвращает идентификатор модели, которая будет выбрана по умолчанию при старте приложения.
- */
-private fun defaultModelId(config: Properties): String =
-    LanguageModelFactory.availableModels(config)
-        .firstOrNull { it.isConfigured }
-        ?.id
-        ?: error("Не найдена ни одна доступная модель. Проверьте токены в config/app.properties.")
 
 /**
  * Создаёт новый экземпляр агента для выбранной модели и стратегии памяти.
@@ -144,22 +135,6 @@ private fun selectMemoryStrategyOption(appEventSink: AppEventSink): MemoryStrate
 }
 
 /**
- * Принудительно прогревает лениво создаваемый токенизатор перед стартом чата, чтобы первая
- * оценка токенов не была слишком долгой.
- */
-private fun warmUpTokenCounter(
-    languageModel: LanguageModel,
-    lifecycleListener: AgentLifecycleListener
-) {
-    lifecycleListener.onModelWarmupStarted()
-    try {
-        languageModel.tokenCounter?.countText("")
-    } finally {
-        lifecycleListener.onModelWarmupFinished()
-    }
-}
-
-/**
  * Определяет кодировку, используемую текущей консольной сессией.
  */
 private fun detectConsoleCharset(): Charset {
@@ -176,17 +151,4 @@ private fun detectConsoleCharset(): Charset {
  */
 private fun readConsoleLine(): String? = systemConsole?.readLine() ?: consoleReader.readLine()
 
-/**
- * Загружает свойства приложения из локального файла конфигурации.
- */
-private fun loadConfig(): Properties {
-    val configPath = Path.of(CONFIG_FILE)
-    require(Files.exists(configPath)) {
-        "Файл конфигурации $CONFIG_FILE не найден. Создайте его на основе config/app.properties.example."
-    }
-
-    return Properties().apply {
-        Files.newInputStream(configPath).use(::load)
-    }
-}
 

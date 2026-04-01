@@ -1,12 +1,10 @@
-﻿package agent.impl
+package agent.impl
 
+import agent.capability.AgentCapability
 import agent.core.Agent
 import agent.core.AgentInfo
 import agent.core.AgentResponse
 import agent.core.AgentTokenStats
-import agent.core.BranchCheckpointInfo
-import agent.core.BranchInfo
-import agent.core.BranchingStatus
 import agent.format.ResponseFormat
 import agent.format.TextResponseFormat
 import agent.lifecycle.AgentLifecycleListener
@@ -85,17 +83,8 @@ class MrAgent(
         memoryManager.replaceContextFromFile(sourcePath)
     }
 
-    override fun createCheckpoint(name: String?): BranchCheckpointInfo =
-        memoryManager.createCheckpoint(name)
-
-    override fun createBranch(name: String): BranchInfo =
-        memoryManager.createBranch(name)
-
-    override fun switchBranch(name: String): BranchInfo =
-        memoryManager.switchBranch(name)
-
-    override fun branchStatus(): BranchingStatus =
-        memoryManager.branchStatus()
+    override fun <TCapability : AgentCapability> capability(capabilityType: Class<TCapability>): TCapability? =
+        memoryManager.capability(capabilityType)
 
     companion object {
         /**
@@ -108,4 +97,3 @@ class MrAgent(
             "Ты полезный ассистент. Отвечай кратко, если пользователь не просит подробнее."
     }
 }
-

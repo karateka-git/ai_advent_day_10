@@ -1,5 +1,7 @@
 package devtools.comparison
 
+import agent.capability.BranchingCapability
+import agent.capability.capability
 import agent.format.TextResponseFormat
 import agent.impl.MrAgent
 import agent.lifecycle.NoOpAgentLifecycleListener
@@ -45,6 +47,9 @@ class BranchingStrategyConversationExecutor(
             memoryManager = memoryManager
         )
 
+        val branchingCapability = agent.capability<BranchingCapability>()
+            ?: error("Стратегия ${option.id} не предоставляет branching capability.")
+
         val totalSteps = scenario.sharedPrompts.size + scenario.firstBranchPrompts.size + scenario.secondBranchPrompts.size
         var currentStepNumber = 0
 
@@ -60,11 +65,11 @@ class BranchingStrategyConversationExecutor(
             )
         }
 
-        val checkpoint = agent.createCheckpoint(scenario.checkpointName)
-        agent.createBranch(scenario.firstBranchName)
-        agent.createBranch(scenario.secondBranchName)
+        val checkpoint = branchingCapability.createCheckpoint(scenario.checkpointName)
+        branchingCapability.createBranch(scenario.firstBranchName)
+        branchingCapability.createBranch(scenario.secondBranchName)
 
-        agent.switchBranch(scenario.firstBranchName)
+        branchingCapability.switchBranch(scenario.firstBranchName)
         val firstBranchSteps = scenario.firstBranchPrompts.map { prompt ->
             currentStepNumber += 1
             executePrompt(
@@ -77,7 +82,7 @@ class BranchingStrategyConversationExecutor(
             )
         }
 
-        agent.switchBranch(scenario.secondBranchName)
+        branchingCapability.switchBranch(scenario.secondBranchName)
         val secondBranchSteps = scenario.secondBranchPrompts.map { prompt ->
             currentStepNumber += 1
             executePrompt(

@@ -1,3 +1,5 @@
+import agent.capability.AgentCapability
+import agent.capability.BranchingCapability
 import agent.core.Agent
 import agent.core.AgentInfo
 import agent.core.AgentResponse
@@ -427,17 +429,21 @@ private class FakeAgent(
         error("Не должен вызываться в этом тесте.")
     }
 
-    override fun createCheckpoint(name: String?): BranchCheckpointInfo =
-        checkpointInfo
+    override fun <TCapability : AgentCapability> capability(capabilityType: Class<TCapability>): TCapability? {
+        val branchingCapability = object : BranchingCapability {
+            override fun createCheckpoint(name: String?): BranchCheckpointInfo = checkpointInfo
 
-    override fun createBranch(name: String): BranchInfo =
-        createdBranchInfo
+            override fun createBranch(name: String): BranchInfo = createdBranchInfo
 
-    override fun switchBranch(name: String): BranchInfo =
-        switchedBranchInfo
+            override fun switchBranch(name: String): BranchInfo = switchedBranchInfo
 
-    override fun branchStatus(): BranchingStatus =
-        branchingStatus
+            override fun branchStatus(): BranchingStatus = branchingStatus
+        }
+
+        return capabilityType
+            .takeIf { it.isInstance(branchingCapability) }
+            ?.cast(branchingCapability)
+    }
 }
 
 private class FakeLanguageModel(

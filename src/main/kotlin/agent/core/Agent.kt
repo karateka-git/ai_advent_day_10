@@ -1,5 +1,6 @@
-﻿package agent.core
+package agent.core
 
+import agent.capability.AgentCapability
 import agent.format.ResponseFormat
 import java.nio.file.Path
 
@@ -37,23 +38,7 @@ interface Agent<T> {
     fun replaceContextFromFile(sourcePath: Path)
 
     /**
-     * Создаёт checkpoint из текущего активного состояния диалога.
+     * Возвращает дополнительную capability текущей стратегии, если она поддерживается агентом.
      */
-    fun createCheckpoint(name: String? = null): BranchCheckpointInfo
-
-    /**
-     * Создаёт новую ветку из последнего checkpoint.
-     */
-    fun createBranch(name: String): BranchInfo
-
-    /**
-     * Переключает активную ветку диалога.
-     */
-    fun switchBranch(name: String): BranchInfo
-
-    /**
-     * Возвращает текущее состояние ветвления диалога.
-     */
-    fun branchStatus(): BranchingStatus
+    fun <TCapability : AgentCapability> capability(capabilityType: Class<TCapability>): TCapability?
 }
-
