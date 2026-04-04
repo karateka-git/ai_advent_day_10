@@ -1,10 +1,9 @@
 package agent.memory
 
 import agent.memory.core.MemoryStateRefreshMode
-import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
 import agent.memory.model.StickyFactsStrategyState
-import agent.memory.strategy.MemoryStrategyType
+import agent.memory.model.SummaryStrategyState
 import agent.memory.strategy.stickyfacts.ConversationFactsExtractor
 import agent.memory.strategy.stickyfacts.StickyFactsMemoryStrategy
 import kotlin.test.Test
@@ -34,8 +33,7 @@ class StickyFactsMemoryStrategyTest {
                     "budget" to "до 120 тысяч рублей"
                 ),
                 coveredMessagesCount = 4
-            ),
-            metadata = MemoryMetadata(strategyType = MemoryStrategyType.STICKY_FACTS)
+            )
         )
 
         assertEquals(
@@ -68,8 +66,7 @@ class StickyFactsMemoryStrategyTest {
                 ChatMessage(ChatRole.USER, "u1"),
                 ChatMessage(ChatRole.ASSISTANT, "a1"),
                 ChatMessage(ChatRole.USER, "u2")
-            ),
-            metadata = MemoryMetadata(strategyType = MemoryStrategyType.STICKY_FACTS)
+            )
         )
 
         val refreshedState = strategy.refreshState(state)
@@ -111,8 +108,7 @@ class StickyFactsMemoryStrategyTest {
             strategyState = StickyFactsStrategyState(
                 facts = mapOf("existing" to "value"),
                 coveredMessagesCount = 4
-            ),
-            metadata = MemoryMetadata(strategyType = MemoryStrategyType.STICKY_FACTS)
+            )
         )
 
         val refreshedState = strategy.refreshState(state)
@@ -154,7 +150,7 @@ class StickyFactsMemoryStrategyTest {
                 ChatMessage(ChatRole.SYSTEM, "system"),
                 ChatMessage(ChatRole.USER, "Обнови цель.")
             ),
-            metadata = MemoryMetadata(strategyType = MemoryStrategyType.SUMMARY_COMPRESSION)
+            strategyState = SummaryStrategyState()
         )
 
         strategy.refreshState(state)
@@ -177,8 +173,7 @@ class StickyFactsMemoryStrategyTest {
             messages = listOf(
                 ChatMessage(ChatRole.SYSTEM, "system"),
                 ChatMessage(ChatRole.USER, "Это только preview")
-            ),
-            metadata = MemoryMetadata(strategyType = MemoryStrategyType.STICKY_FACTS)
+            )
         )
 
         val refreshedState = strategy.refreshState(state, MemoryStateRefreshMode.PREVIEW)

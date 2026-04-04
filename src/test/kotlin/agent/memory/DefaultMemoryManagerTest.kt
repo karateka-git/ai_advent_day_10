@@ -9,12 +9,10 @@ import agent.memory.strategy.branching.BranchingMemoryStrategy
 import agent.memory.strategy.MemoryStrategyType
 import agent.memory.strategy.nocompression.NoCompressionMemoryStrategy
 import agent.memory.strategy.summary.SummaryCompressionMemoryStrategy
-import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
 import agent.memory.strategy.summary.ConversationSummarizer
 import agent.storage.JsonConversationStore
 import agent.storage.model.ConversationMemoryState
-import agent.storage.model.StoredMemoryMetadata
 import agent.storage.model.StoredMessage
 import agent.storage.model.StoredStrategyState
 import agent.storage.model.StoredSummary
@@ -206,11 +204,8 @@ class DefaultMemoryManagerTest {
                     summary = StoredSummary(
                         content = "Сжатый фрагмент",
                         coveredMessagesCount = 2
-                    )
-                ),
-                metadata = StoredMemoryMetadata(
-                    strategyId = "summary_compression",
-                    compressedMessagesCount = 2
+                    ),
+                    summaryCoveredMessagesCount = 2
                 )
             )
         )

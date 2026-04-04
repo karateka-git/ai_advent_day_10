@@ -10,8 +10,8 @@ import agent.lifecycle.AgentLifecycleListener
 import agent.lifecycle.ContextCompressionStats
 import agent.lifecycle.NoOpAgentLifecycleListener
 import agent.memory.strategy.branching.BranchCoordinator
-import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
+import agent.memory.model.SummaryStrategyState
 import agent.memory.persistence.ConversationMemoryStateMapper
 import agent.memory.strategy.MemoryStrategyType
 import agent.memory.strategy.nocompression.NoCompressionMemoryStrategy
@@ -89,7 +89,7 @@ class DefaultMemoryManager(
         )
         memoryState =
             if (memoryStrategy.type == MemoryStrategyType.BRANCHING) {
-                synchronizeStrategyId(memoryStrategy.refreshState(updatedState, MemoryStateRefreshMode.REGULAR))
+                memoryStrategy.refreshState(updatedState, MemoryStateRefreshMode.REGULAR)
             } else {
                 updatedState
             }
@@ -97,9 +97,9 @@ class DefaultMemoryManager(
     }
 
     override fun clear() {
-        memoryState = MemoryState(
-            messages = listOf(createSystemMessage()),
-            metadata = MemoryMetadata(strategyType = memoryStrategy.type)
+        memoryState = memoryStrategy.refreshState(
+            MemoryState(messages = listOf(createSystemMessage())),
+            MemoryStateRefreshMode.REGULAR
         )
         saveState()
     }
@@ -110,9 +110,7 @@ class DefaultMemoryManager(
             "Файл истории $sourcePath пустой или не содержит сообщений."
         }
 
-        memoryState = synchronizeStrategyId(
-            memoryStrategy.refreshState(importedState, MemoryStateRefreshMode.REGULAR)
-        )
+        memoryState = memoryStrategy.refreshState(importedState, MemoryStateRefreshMode.REGULAR)
         saveState()
     }
 
@@ -122,14 +120,12 @@ class DefaultMemoryManager(
     private fun loadMemoryState(): MemoryState {
         val savedState = stateMapper.toRuntime(conversationStore.loadState())
         if (savedState.messages.isNotEmpty()) {
-            return synchronizeStrategyId(
-                memoryStrategy.refreshState(savedState, MemoryStateRefreshMode.REGULAR)
-            )
+            return memoryStrategy.refreshState(savedState, MemoryStateRefreshMode.REGULAR)
         }
 
-        val initialState = MemoryState(
-            messages = listOf(createSystemMessage()),
-            metadata = MemoryMetadata(strategyType = memoryStrategy.type)
+        val initialState = memoryStrategy.refreshState(
+            MemoryState(messages = listOf(createSystemMessage())),
+            MemoryStateRefreshMode.REGULAR
         )
         saveState(initialState)
         return initialState
@@ -139,22 +135,10 @@ class DefaultMemoryManager(
         saveState(memoryState)
     }
 
-    /**
-     * Сохраняет текущее состояние памяти, синхронизируя идентификатор активной стратегии.
-     */
     private fun saveState(state: MemoryState) {
-        memoryState = synchronizeStrategyId(state)
+        memoryState = state
         conversationStore.saveState(stateMapper.toStored(memoryState))
     }
-
-    /**
-     * Синхронизирует metadata с текущей активной стратегией после того,
-     * как стратегия уже обработала входное состояние.
-     */
-    private fun synchronizeStrategyId(state: MemoryState): MemoryState =
-        state.copy(
-            metadata = state.metadata.copy(strategyType = memoryStrategy.type)
-        )
 
     /**
      * Формирует базовое системное сообщение для нового или очищенного диалога.
@@ -194,7 +178,7 @@ class DefaultMemoryManager(
         notifyCompression: Boolean,
         mode: MemoryStateRefreshMode = MemoryStateRefreshMode.REGULAR
     ): MemoryState {
-        val refreshedState = synchronizeStrategyId(memoryStrategy.refreshState(state, mode))
+        val refreshedState = memoryStrategy.refreshState(state, mode)
         if (!notifyCompression || !compressionApplied(state, refreshedState)) {
             return refreshedState
         }
@@ -214,7 +198,13 @@ class DefaultMemoryManager(
      * Определяет, изменилось ли покрытие истории rolling summary на последнем проходе.
      */
     private fun compressionApplied(previousState: MemoryState, refreshedState: MemoryState): Boolean =
-        refreshedState.metadata.compressedMessagesCount > previousState.metadata.compressedMessagesCount
+        summaryCoveredMessagesCount(refreshedState) > summaryCoveredMessagesCount(previousState)
+
+    private fun summaryCoveredMessagesCount(state: MemoryState): Int =
+        (state.strategyState as? SummaryStrategyState)
+            ?.takeIf { it.strategyType == MemoryStrategyType.SUMMARY_COMPRESSION }
+            ?.coveredMessagesCount
+            ?: 0
 
     private fun createCheckpoint(name: String?): BranchCheckpointInfo {
         requireBranchingEnabled()

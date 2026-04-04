@@ -21,7 +21,8 @@ sealed interface StrategyState {
  */
 data class SummaryStrategyState(
     override val strategyType: MemoryStrategyType = MemoryStrategyType.SUMMARY_COMPRESSION,
-    val summary: ConversationSummary? = null
+    val summary: ConversationSummary? = null,
+    val coveredMessagesCount: Int = 0
 ) : StrategyState
 
 /**

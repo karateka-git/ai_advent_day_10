@@ -72,10 +72,8 @@ class SummaryCompressionMemoryStrategy(
                     summary = ConversationSummary(
                         content = summaryContent,
                         coveredMessagesCount = updatedCoveredMessagesCount
-                    )
-                ),
-                metadata = currentState.metadata.copy(
-                    compressedMessagesCount = updatedCoveredMessagesCount
+                    ),
+                    coveredMessagesCount = updatedCoveredMessagesCount
                 )
             )
         }
@@ -86,7 +84,7 @@ class SummaryCompressionMemoryStrategy(
      * только с текущего окна, а не со всей накопленной истории.
      */
     private fun prepareStateForSummary(state: MemoryState): MemoryState {
-        if (state.metadata.strategyType == type) {
+        if (summaryState(state) != null) {
             return state
         }
 
@@ -95,9 +93,8 @@ class SummaryCompressionMemoryStrategy(
         val coveredMessagesCount = (dialogMessages.size - activationWindowSize).coerceAtLeast(0)
 
         return state.copy(
-            strategyState = null,
-            metadata = state.metadata.copy(
-                compressedMessagesCount = coveredMessagesCount
+            strategyState = SummaryStrategyState(
+                coveredMessagesCount = coveredMessagesCount
             )
         )
     }
@@ -107,15 +104,19 @@ class SummaryCompressionMemoryStrategy(
      * при позднем включении стратегии.
      */
     private fun coveredMessagesCount(state: MemoryState): Int =
-        summary(state)?.coveredMessagesCount ?: state.metadata.compressedMessagesCount
+        summaryState(state)?.summary?.coveredMessagesCount
+            ?: summaryState(state)?.coveredMessagesCount
+            ?: 0
 
     /**
      * Возвращает strategy-specific summary state только если он совместим с текущей стратегией.
      */
     private fun summary(state: MemoryState): ConversationSummary? =
+        summaryState(state)?.summary
+
+    private fun summaryState(state: MemoryState): SummaryStrategyState? =
         (state.strategyState as? SummaryStrategyState)
             ?.takeIf { it.strategyType == type }
-            ?.summary
 
     /**
      * Объединяет текущее rolling summary со следующей порцией старых несжатых сообщений.

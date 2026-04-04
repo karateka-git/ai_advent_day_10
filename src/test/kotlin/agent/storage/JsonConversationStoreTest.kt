@@ -1,7 +1,6 @@
 ﻿package agent.storage
 
 import agent.storage.model.ConversationMemoryState
-import agent.storage.model.StoredMemoryMetadata
 import agent.storage.model.StoredMessage
 import agent.storage.model.StoredStrategyState
 import agent.storage.model.StoredSummary
@@ -63,7 +62,7 @@ class JsonConversationStoreTest {
     }
 
     @Test
-    fun `saveState and loadState preserve strategy state and metadata`() {
+    fun `saveState and loadState preserve strategy state`() {
         val tempDir = Files.createTempDirectory("conversation-store-test")
         val store = JsonConversationStore(tempDir.resolve("conversation.json"))
         val state = ConversationMemoryState(
@@ -77,8 +76,7 @@ class JsonConversationStoreTest {
                     content = "Пользователь поздоровался.",
                     coveredMessagesCount = 2
                 )
-            ),
-            metadata = StoredMemoryMetadata(strategyId = "no_compression")
+            )
         )
 
         store.saveState(state)

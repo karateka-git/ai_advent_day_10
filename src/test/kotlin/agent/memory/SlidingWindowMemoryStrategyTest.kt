@@ -1,10 +1,8 @@
 ﻿package agent.memory
 
 import agent.memory.model.ConversationSummary
-import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
 import agent.memory.model.SummaryStrategyState
-import agent.memory.strategy.MemoryStrategyType
 import agent.memory.strategy.slidingwindow.SlidingWindowMemoryStrategy
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,11 +47,8 @@ class SlidingWindowMemoryStrategyTest {
                 summary = ConversationSummary(
                     content = "Сжатый фрагмент",
                     coveredMessagesCount = 2
-                )
-            ),
-            metadata = MemoryMetadata(
-                strategyType = MemoryStrategyType.SUMMARY_COMPRESSION,
-                compressedMessagesCount = 2
+                ),
+                coveredMessagesCount = 2
             )
         )
 

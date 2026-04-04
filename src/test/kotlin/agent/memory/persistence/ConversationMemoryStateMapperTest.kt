@@ -4,7 +4,6 @@ import agent.memory.model.BranchCheckpointState
 import agent.memory.model.BranchConversationState
 import agent.memory.model.BranchingStrategyState
 import agent.memory.model.ConversationSummary
-import agent.memory.model.MemoryMetadata
 import agent.memory.model.MemoryState
 import agent.memory.model.StickyFactsStrategyState
 import agent.memory.model.SummaryStrategyState
@@ -28,11 +27,8 @@ class ConversationMemoryStateMapperTest {
                 summary = ConversationSummary(
                     content = "summary",
                     coveredMessagesCount = 2
-                )
-            ),
-            metadata = MemoryMetadata(
-                strategyType = MemoryStrategyType.SUMMARY_COMPRESSION,
-                compressedMessagesCount = 2
+                ),
+                coveredMessagesCount = 2
             )
         )
 
@@ -79,8 +75,7 @@ class ConversationMemoryStateMapperTest {
                         )
                     )
                 )
-            ),
-            metadata = MemoryMetadata(strategyType = MemoryStrategyType.BRANCHING)
+            )
         )
 
         val restoredBranchingState = mapper.toRuntime(mapper.toStored(runtimeState))
@@ -95,8 +90,7 @@ class ConversationMemoryStateMapperTest {
             strategyState = StickyFactsStrategyState(
                 facts = mapOf("goal" to "Собрать ТЗ"),
                 coveredMessagesCount = 1
-            ),
-            metadata = MemoryMetadata(strategyType = MemoryStrategyType.STICKY_FACTS)
+            )
         )
 
         val restoredStickyFactsState = mapper.toRuntime(mapper.toStored(stickyFactsState))

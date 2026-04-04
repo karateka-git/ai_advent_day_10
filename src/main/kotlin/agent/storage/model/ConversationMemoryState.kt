@@ -5,8 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ConversationMemoryState(
     val messages: List<StoredMessage> = emptyList(),
-    val strategyState: StoredStrategyState? = null,
-    val metadata: StoredMemoryMetadata = StoredMemoryMetadata()
+    val strategyState: StoredStrategyState? = null
 )
 
 /**
@@ -16,6 +15,7 @@ data class ConversationMemoryState(
 data class StoredStrategyState(
     val strategyType: String? = null,
     val summary: StoredSummary? = null,
+    val summaryCoveredMessagesCount: Int = 0,
     val facts: Map<String, String> = emptyMap(),
     val factsCoveredMessagesCount: Int = 0,
     val activeBranchName: String? = null,

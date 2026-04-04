@@ -30,7 +30,8 @@ class StrategyStateMapper(
 
         return when (storedStrategyState.strategyType?.let(MemoryStrategyType::fromId)) {
             MemoryStrategyType.SUMMARY_COMPRESSION -> SummaryStrategyState(
-                summary = storedStrategyState.summary?.toRuntimeSummary()
+                summary = storedStrategyState.summary?.toRuntimeSummary(),
+                coveredMessagesCount = storedStrategyState.summaryCoveredMessagesCount
             )
             MemoryStrategyType.STICKY_FACTS -> StickyFactsStrategyState(
                 facts = storedStrategyState.facts,
@@ -88,7 +89,8 @@ class StrategyStateMapper(
             )
             is SummaryStrategyState -> StoredStrategyState(
                 strategyType = strategyState.strategyType.id,
-                summary = strategyState.summary?.toStoredSummary()
+                summary = strategyState.summary?.toStoredSummary(),
+                summaryCoveredMessagesCount = strategyState.coveredMessagesCount
             )
         }
 
