@@ -11,6 +11,8 @@ import llm.core.model.ChatMessage
 /**
  * Стратегия ветвления, которая хранит несколько независимых продолжений диалога
  * и отправляет в модель сообщения активной ветки.
+ *
+ * Переопределяет `refreshState`, потому что должна синхронизировать сообщения активной ветки с общим состоянием памяти.
  */
 class BranchingMemoryStrategy : MemoryStrategy {
     override val type: MemoryStrategyType = MemoryStrategyType.BRANCHING

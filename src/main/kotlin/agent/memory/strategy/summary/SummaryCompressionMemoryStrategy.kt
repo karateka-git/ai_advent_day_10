@@ -12,6 +12,8 @@ import llm.core.model.ChatRole
 /**
  * Стратегия памяти, которая хранит rolling summary поверх полной истории сообщений
  * и отправляет в модель summary вместе с ещё не покрытым хвостом диалога.
+ *
+ * Переопределяет `refreshState`, потому что должна пересчитывать rolling summary и количество сообщений, уже покрытых этим summary.
  */
 class SummaryCompressionMemoryStrategy(
     private val recentMessagesCount: Int,

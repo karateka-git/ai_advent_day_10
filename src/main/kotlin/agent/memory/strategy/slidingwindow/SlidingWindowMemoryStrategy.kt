@@ -9,6 +9,8 @@ import llm.core.model.ChatRole
 /**
  * Стратегия памяти, которая оставляет в effective prompt только системные сообщения
  * и последние сообщения диалога из полной истории.
+ *
+ * Не переопределяет `refreshState`, потому что выбирает окно прямо из полной истории и не поддерживает отдельный state стратегии.
  */
 class SlidingWindowMemoryStrategy(
     private val recentMessagesCount: Int

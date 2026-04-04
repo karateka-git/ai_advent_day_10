@@ -11,6 +11,8 @@ import llm.core.model.ChatRole
 /**
  * Стратегия памяти, которая хранит устойчивые facts и добавляет их в prompt
  * вместе с последними сообщениями диалога.
+ *
+ * Переопределяет `refreshState`, потому что должна пакетно обновлять facts и отслеживать, какая часть диалога уже обработана.
  */
 class StickyFactsMemoryStrategy(
     private val recentMessagesCount: Int,

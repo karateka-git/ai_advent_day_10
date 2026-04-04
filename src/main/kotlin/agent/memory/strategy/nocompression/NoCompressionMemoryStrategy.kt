@@ -7,6 +7,8 @@ import llm.core.model.ChatMessage
 
 /**
  * Базовая стратегия, которая передаёт полную сохранённую историю без сжатия.
+ *
+ * Не переопределяет `refreshState`, потому что использует только список сообщений и не хранит отдельный derived state.
  */
 class NoCompressionMemoryStrategy : MemoryStrategy {
     override val type: MemoryStrategyType = MemoryStrategyType.NO_COMPRESSION

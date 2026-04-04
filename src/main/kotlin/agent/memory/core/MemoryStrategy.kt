@@ -14,12 +14,12 @@ interface MemoryStrategy {
     val type: MemoryStrategyType
 
     /**
-     * Формирует фактический контекст prompt, который должен быть отправлен в языковую модель.
+     * Формирует фактический контекст prompt, который должен быть отправлен в LLM.
      */
     fun effectiveContext(state: MemoryState): List<ChatMessage>
 
     /**
-     * Обновляет состояние памяти после изменения диалога.
+     * Обновляет сохранённое состояние памяти после изменения диалога, не отвечая за сам prompt.
      */
     fun refreshState(
         state: MemoryState,
